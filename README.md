@@ -1,5 +1,6 @@
 # FRTM
 ## Files
+- Codes: the directory of codes
 - Examples: examples.zip
 - Datasets: BJDATA.zip EURDATA.zip EURDATA.z01 SYNDATA.zip
 
@@ -24,22 +25,25 @@ file content format:
 ```
 		
 - r : Algorithm Id (default:1)
-	
-	- 12:FRTM
-	- 19:DFRTM
-	- 20:FRTMFORDYN (FRTM revision for DFRTM)
-	
-	- 22:FRTMPLUS (FRTM OPT1)
-	- 23:FRTMPLUSDYN (FRTM OPT1 revision for DFRTM OPT1)
-	- 24:DFRTMPLUS (DFRTM OPT1)
 
-	- 31:FRTMSHARP (FRTM+)
-	- 33:FRTMSHARPDYN (FRTM+ revision for DFRTM+)
-	- 34:DFRTMSHARP (DFRTM+)
+```	
+12:FRTM
+19:DFRTM
+20:FRTMFORDYN (FRTM revision for DFRTM)
+	
+22:FRTMOPT1 (FRTM OPT1)
+23:FRTMOPT1DYN (FRTM OPT1 revision for DFRTM OPT1)
+24:DFRTMOPT1 (DFRTM OPT1)
+
+31:FRTMPLUS (FRTM+)
+33:FRTMPLUSDYN (FRTM+ revision for DFRTM+)
+34:DFRTMPLUS (DFRTM+)
+```
+
 - o : Output level of motif (default:0)
 
 ```
-&ensp;&ensp; three levels:
+three levels:
 
 	0:only output motif number, the running time and memory use
 
@@ -76,18 +80,16 @@ e.g.: -b:1,3 means the gap of each noise duration in each edge of motifs is less
 ```
 
 **Examples for static algorithm FRTM**
-
-FRTM.exe -i:temporalgraph.txt -k:k10.txt -v:[vertex number] -e:[edge number] -t:[snapshot number] -a:5,0.04 -b:1,3 -r:[algorithm id] -f:output.txt -o:2 
-	
-(use DEL-Table, only output the number of motifs and edges, time, memory)
-
+```
+FRTM.exe -i:[graph file] -k:[k file] -v:[vertex number] -e:[edge number] -t:[snapshot number] -a:0.04 -b:3 -r:[algorithm id] -f:output.txt -o:2 
+(use DEL-Table, output the motif number, the running time, memory use and detailed information of motif edges with their labels, global relaxation bound = 4%, local relaxation bound = 3)
+```
 
 **Examples for static algorithm DFRTM**
-
-FRTM.exe -i:temporalgraph.txt -k:k10.txt -v:[vertex number] -e:[edge number] -t:[snapshot number] -l:500 -n:1000 -a:5,0.04 -b:1,3 -r:[algorithm id] -f:output.txt -o:0
-		
-(use DEL-Table, only output the number of motifs, time, memory, interval of temporal graph is from [0,500] to [0,1000])
-		
+```
+FRTM.exe -i:[graph file] -k:[k file] -v:[vertex number] -e:[edge number] -t:[snapshot number] -l:500 -n:1000 -a:0.04 -b:3 -r:[algorithm id] -f:output.txt -o:0
+(use DEL-Table, only output motif number, the running time and memory use, the interval of temporal graph is from [0,500] to [0,1000], global relaxation bound = 4%, local relaxation bound = 3) 
+```		
 
 
 ## Datasets
@@ -95,4 +97,4 @@ FRTM.exe -i:temporalgraph.txt -k:k10.txt -v:[vertex number] -e:[edge number] -t:
 - EURD<font size = 8>ATA</font>: A real-life dataset for a renewable European electric power system. Each edge represents a transmission line with only static properties, and each node represents a merge point of transmission lines with a dynamic property of the hourly energy demand. 
 - SYND<font size = 8>ATA</font>: Synthetic datasets produced by the synthetic data generator.
 
-If you want to get the processed data in our paper, please feel free to contact us! 
+If you want to get the processed data in our paper, please feel free to contact us!   
