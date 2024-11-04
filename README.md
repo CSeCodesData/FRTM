@@ -4,12 +4,12 @@
 - Examples: examples.zip
 - Datasets: BJDATA.zip EURDATA.zip EURDATA.z01 SYNDATA.zip
 
-## Environment
+## The Environment
 - IDE: VS2017
 - Operation System: win10 x64
 ***
 
-## Parameters of Execution Program
+## Parameters of The Execution Program
 - v : The number of nodes
 - e : The number of edges
 - t : The number of snapshots
