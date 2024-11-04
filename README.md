@@ -1,6 +1,5 @@
-# FTM
+# FRTM
 ## Files
-- Codes: FTM.zip
 - Examples: examples.zip
 - Datasets: BJDATA.zip EURDATA.zip EURDATA.z01 SYNDATA.zip
 
@@ -41,13 +40,13 @@ file content format:
 
 ```
 &ensp;&ensp; three levels:
-	0:only output motif number, the running time and memory use
-	1:except for those outputs mentioned above, output the edges number of every motif
-	2:except for those outputs mentioned above, output the detailed information of motif edges with their labels (output labels)
-	3:except for those outputs mentioned above, output the detailed information of motif edges with their multiple labels (multiple real labels due to label changes)
-```
 
-- g : Index id (default:2, DEL-Table)
+	0:only output motif number, the running time and memory use
+
+	1:except for those outputs mentioned above, output the edges number of every motif
+
+	2:except for those outputs mentioned above, output the detailed information of motif edges with their labels (output labels)
+```
 
 - l : Limit the start time and end time of input data (default:doesn't limit) 
 
@@ -71,21 +70,21 @@ format: -a:5,value(double)
 - b : The value of the local relaxation bound
 	
 ```
-format: -b:1,value(integer)
-type= 1:  control the maximum length of each gap for noise of all edges
+format: -b:1,value(integer), type= 1:  control the maximum length of each gap for noise of all edges
+
 e.g.: -b:1,3 means the gap of each noise duration in each edge of motifs is less than or equal to 3
 ```
 
 **Examples for static algorithm FRTM**
 
-FRTM.exe -i:temporalgraph.txt -a-k:k10.txt -r:4 -f:output.txt -o:1  
+FRTM.exe -i:temporalgraph.txt -k:k10.txt -v:[vertex number] -e:[edge number] -t:[snapshot number] -a:5,0.04 -b:1,3 -r:[algorithm id] -f:output.txt -o:2 
 	
 (use DEL-Table, only output the number of motifs and edges, time, memory)
 
 
 **Examples for static algorithm DFRTM**
 
-FRTM.exe -i:temporalgraph.txt -a-k:k10.txt -r:9 -f:output.txt -o:1  -l:500 -n:1000
+FRTM.exe -i:temporalgraph.txt -k:k10.txt -v:[vertex number] -e:[edge number] -t:[snapshot number] -l:500 -n:1000 -a:5,0.04 -b:1,3 -r:[algorithm id] -f:output.txt -o:0
 		
 (use DEL-Table, only output the number of motifs, time, memory, interval of temporal graph is from [0,500] to [0,1000])
 		
