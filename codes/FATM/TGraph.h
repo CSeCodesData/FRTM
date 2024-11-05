@@ -428,7 +428,7 @@ public:
 
 	virtual void loadInfomation(const char* src, int fixedE, int k) = 0;
 #pragma endregion
-
+	virtual inline void lazyUpdate(int t, int pos, int edgeId) = 0;
 private:
 	//compute the intersection of scope[e] for each edge in the cc
 	void getIntersectionOfScope(vec(int)& edges, pair<int,int>& intersectIntv);

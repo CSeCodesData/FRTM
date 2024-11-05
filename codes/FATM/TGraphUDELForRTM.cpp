@@ -12,8 +12,8 @@ void TGraphUDEL::edgeFilterShortIntv(int intvB, int intvE, int limited,
 	int intvStart;
 	for (int i = 0; i < nEdge; i++) {
 
-		edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
-		if (isEdgeTypeFixed && !fixLabel[eW[TGraph::posUsedForEdgeFilter + i]])  continue;//label at intvB
+		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
+		if (isEdgeTypeFixed && !fixLabel[lab[TGraph::posUsedForEdgeFilter + i]])  continue;//label at intvB
 		/*not exists the maximum interval containing [intvB,intvE] for case 1 and 2
 			put here for less time*/
 		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) < intvLen) {
@@ -53,21 +53,21 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 	int labelPosForEdge = 0;
 	int mainLabelPos;
 	for (int i = 0; i < nEdge; labelPosForEdge += numOfLabel, i++) {
-		edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i]; //label at intvE
-		if (isEdgeTypeFixed && !fixLabel[eW[TGraph::posUsedForEdgeFilter + i]])  continue;//label at intvB
+		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i]; //label at intvE
+		if (isEdgeTypeFixed && !fixLabel[lab[TGraph::posUsedForEdgeFilter + i]])  continue;//label at intvB
 	
 		//dynamic
 		int pos = intvB * nEdge + i;
-		int mainLabel = eW[pos];
+		int mainLabel = lab[pos];
 		mainLabelPos = labelPosForEdge + mainLabel;
 		int checkE = scanT[mainLabelPos];//scan at the previous row
 		if (checkE == choiceEndT) {
 			int localNoise = 0;
 			pos = checkE * nEdge + i;
-			if (eW[pos] != mainLabel) {
+			if (lab[pos] != mainLabel) {
 				int localNoise = 0;
 				int gap;
-				while (eW[pos]!=mainLabel) {
+				while (lab[pos]!=mainLabel) {
 					gap = max(bef[pos], 1);
 					localNoise += gap;
 					pos -= gap * nEdge;
@@ -105,12 +105,13 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 
 			pos = intvB * nEdge + i;
 			int currentPos = intvB - startT;
+			lazyUpdate(currentPos, pos, i);//update aft
 			int nextLabPos = min(currentPos + max(aft[pos], 1) - 1, endT - startT) + 1;
 			int localNoise;
 			int labelsSum = 0, noiseNum = 0, forbidTimeStartT;
 			while (currentPos < currNTimestamp) {
 				int intvL = nextLabPos - currentPos;
-				edgeType = eW[pos];
+				edgeType = lab[pos];
 				if (edgeType == mainLabel) {
 					localNoise = 0;
 					double minNoise = Setting::delta * (labelsSum + 1);
@@ -153,12 +154,16 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 				currentPos = nextLabPos;
 				pos = currentPos * nEdge + i;
 				if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-					if (currentPos < currNTimestamp)
+					if (currentPos < currNTimestamp){
+						lazyUpdate(currentPos - 1, pos - nEdge, i);//update aft
 						nextLabPos = min(nextLabPos - 2 - aft[pos - nEdge], endT - startT) + 1;
+					}
 				}
 				else {
-					if (currentPos < currNTimestamp)
+					if (currentPos < currNTimestamp) {
+						lazyUpdate(currentPos, pos, i);//update aft
 						nextLabPos = min(currentPos + max(aft[pos], 1) - 1, endT - startT) + 1;
+					}
 				}
 			}
 			if (forbidTimeStartT != -1) {
@@ -200,7 +205,7 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 		else {//case 1 and 2
 			maxIntvShortIntv[i].first = intvStart;
 			selectedNum++;
-
+			lazyUpdate(intvE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
 			check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
 
 			maxIntvShortIntv[i].second = timePos + check + startT;
@@ -226,7 +231,7 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 		labelPosForEdge = i * numOfLabel;
 
 		int pos = TGraph::posUsedForEdgeFilter + i;
-		int mainLabel = eW[pos];
+		int mainLabel = lab[pos];
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 
 		mainLabelPos = labelPosForEdge + mainLabel;
@@ -237,10 +242,10 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 		if (checkE == endT) {
 			int localNoise = 0;
 			pos = checkE * nEdge + i;
-			if (eW[pos] != mainLabel) {
+			if (lab[pos] != mainLabel) {
 				int localNoise = 0;
 				int gap;
-				while (eW[pos] != mainLabel) {
+				while (lab[pos] != mainLabel) {
 					gap = max(bef[pos], 1);
 					localNoise += gap;
 					pos -= gap * nEdge;
@@ -272,7 +277,7 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 			}
 		}
 
-		edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i];
+		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];
 		/*not exists the maximum interval containing [intvB,intvE]*/
 		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) < intvLen) {
 			if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;
@@ -296,7 +301,7 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 		else {//case 1 and 2
 			maxIntvShortIntv[i].first = intvStart;
 			selectedNum++;
-
+			lazyUpdate(intvE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
 			check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
 			maxIntvShortIntv[i].second = timePos + check + startT;
 
@@ -338,7 +343,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 	int timestampPosForEMaxIntvlEndT;
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
 
-		mainLabel = eW[posUsedForEdgeFilter + i];
+		mainLabel = lab[posUsedForEdgeFilter + i];
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;
 
@@ -348,8 +353,8 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
 		
 		if (currentPos != 0) {
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
 					continue;
 				}
 				else {
@@ -381,7 +386,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 						}
 						
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -453,7 +458,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -463,11 +468,11 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -482,13 +487,13 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -510,13 +515,13 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -537,7 +542,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -672,14 +677,14 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									if (EMaxIntvlEndT < lastMainLabelT) {
 										maxIntv[i].first = intvB;
@@ -707,7 +712,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 										
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -768,7 +773,7 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT],1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -857,27 +862,27 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -908,11 +913,11 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -966,7 +971,7 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 
 	int timestampPosForEMaxIntvlEndT;
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		mainLabel = eW[posUsedForEdgeFilter + i];
+		mainLabel = lab[posUsedForEdgeFilter + i];
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;
 
@@ -978,8 +983,8 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 		
 		if (currentPos != 0) {
 			
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
 					continue;
 				}
 				else {
@@ -1011,7 +1016,7 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 						}
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -1082,7 +1087,7 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -1092,11 +1097,11 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -1112,13 +1117,13 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -1140,13 +1145,13 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -1163,11 +1168,12 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 						while (forbidIntv != nullptr) {
 
 							forbidTimeStartT = -1;
+							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -1215,12 +1221,16 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 								tempT = nextLabT;
 								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
+									if (tempT <= stopT) {
+										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+									}
 								}
 								else {
-									if (tempT <= stopT)
+									if (tempT <= stopT) {
+										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+									}
 								}
 							}
 							if (forbidTimeStartT != -1) {
@@ -1279,11 +1289,15 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 						}
 					}
 					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT)*nEdge + i], 1) - 1;
+						int checkPos = (lastMainLabelT - startT)*nEdge + i;
+						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 						//dynamic
 						if (localNoise <= Setting::c) {
-							if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-								if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+							checkPos = labelEnd * nEdge + i;
+							lazyUpdate(labelEnd, checkPos, i);//update aft
+							if (aft[checkPos] != -MYINFINITE) {
+								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 									newEIntR->emplace_back(rd4);
@@ -1329,14 +1343,14 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									if (EMaxIntvlEndT < lastMainLabelT) {
 										maxIntv[i].first = intvB;
@@ -1365,7 +1379,7 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -1420,11 +1434,11 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
-
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -1469,12 +1483,16 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - aft[tempTimestampPosForIT - nEdge] - 2, endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp){
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -1484,11 +1502,15 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 
 
 		if (lastMainLabelPos < endPos) {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -1540,27 +1562,27 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -1583,10 +1605,14 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 		else {
 
 			//dynamic
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -1618,11 +1644,11 @@ void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -1683,7 +1709,7 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 		labelPosForEdge = i * numOfLabel;
 		//auto beginTest = std::chrono::steady_clock::now();
 
-		mainLabel = eW[posUsedForEdgeFilter + i];
+		mainLabel = lab[posUsedForEdgeFilter + i];
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;
 
@@ -1700,13 +1726,13 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 			//recover localNoise , noiseNum and lastMainLabelPos
 			int timestampPosForEL = currentPos * nEdge + i;
-			edgeType = eW[timestampPosForEL];
+			edgeType = lab[timestampPosForEL];
 			if (edgeType != mainLabel) {
 				int eLvalue = max(bef[timestampPosForEL], 1);
 				int tempTPos = timestampPosForEL - eLvalue * nEdge;
 				int tempPosForLabels = currentPos - eLvalue;
 				localNoise = eLvalue;
-				while (eW[tempTPos] != mainLabel) {
+				while (lab[tempTPos] != mainLabel) {
 					eLvalue = max(bef[tempTPos], 1);
 					tempPosForLabels -= eLvalue;
 					localNoise += eLvalue;
@@ -1722,7 +1748,7 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 			if (maxIntv[i].second == -1) {
 				lastMainLabelPos = beginPos;
 			}
-			else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+			else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 				lastMainLabelPos = max(maxIntv[i].second, beginPos);
 			}
 			else {
@@ -1732,11 +1758,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 					int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 					for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 					}
 					if (temp == preEMaxIntvlPtr.front) {
 						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 					}
 				}
 				lastMainLabelPos = max(EMaxIntvlEndT, beginPos);
@@ -1757,8 +1783,8 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 		else {
 			if (currentPos != 0) {
 				
-				if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {
-					if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
+				if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {
+					if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
 						continue;
 					}
 					else {
@@ -1792,7 +1818,7 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							}
 
 							int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-							if (eW[tempEWPos] == mainLabel) {
+							if (lab[tempEWPos] == mainLabel) {
 								intvItem->item.second++;
 							}
 							else {
@@ -1868,7 +1894,7 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 					if (maxIntv[i].second == -1) {
 						EMaxIntvlEndT = -1;
 					}
-					else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+					else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 						EMaxIntvlEndT = maxIntv[i].second;
 					}
 					else {
@@ -1878,11 +1904,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 							for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 							}
 							if (temp == preEMaxIntvlPtr.front) {
 								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 							}
 						}
 					}
@@ -1897,13 +1923,13 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 						if (forbidIntv == nullptr) {//does not need update
 							if (currentPos != currNTimestamp) {
 								int timestampPosForEL = currentPos * nEdge + i;
-								edgeType = eW[timestampPosForEL];
+								edgeType = lab[timestampPosForEL];
 								if (edgeType != mainLabel) {
 									int eLvalue = max(bef[timestampPosForEL], 1);
 									int tempTPos = timestampPosForEL - eLvalue * nEdge;
 									int tempPosForLabels = currentPos - eLvalue;
 									localNoise = eLvalue;
-									while (eW[tempTPos] != mainLabel) {
+									while (lab[tempTPos] != mainLabel) {
 										eLvalue = max(bef[tempTPos], 1);
 										tempPosForLabels -= eLvalue;
 										localNoise += eLvalue;
@@ -1925,13 +1951,13 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							int tempPos = tempT - startT, intvLen = tempT - intvB;
 							labelsSum = tempT - intvB;
 							int tempTimestampPosForEL = tempPos * nEdge + i;
-							edgeType = eW[tempTimestampPosForEL];
+							edgeType = lab[tempTimestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[tempTimestampPosForEL], 1);
 								int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = tempPos - eLvalue;
 								localNoise = eLvalue - 1;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -1948,11 +1974,12 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							while (forbidIntv != nullptr) {
 
 								forbidTimeStartT = -1;
+								lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 								int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 								while (tempT <= stopT) {
 
 									intvLen = nextLabT - tempT;
-									edgeType = eW[tempTimestampPosForEL];
+									edgeType = lab[tempTimestampPosForEL];
 									if (edgeType == mainLabel) {
 										localNoise = 0;
 										minNoise = Setting::delta * (labelsSum + 1);
@@ -2000,16 +2027,19 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 									tempT = nextLabT;
 									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 									if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-										if (tempT <= stopT)
+										if (tempT <= stopT) {
+											lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 											nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+										}
 									}
 									else {
-										if (tempT <= stopT)
+										if (tempT <= stopT){
+											lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 											nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+										}
 									}
 								}
 								if (forbidTimeStartT != -1) {
-									//now.vioT.addNodeAft(tempIntv, make_pair(forbidTimeStartT,
 									if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
 										now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
 										tempIntv = tempIntv->next;
@@ -2065,11 +2095,15 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							}
 						}
 						if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-							int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT) *nEdge + i], 1) - 1;
+							int checkPos = (lastMainLabelT - startT) *nEdge + i;
+							lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+							int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 							//dynamic
 							if (localNoise <= Setting::c) {
-								if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-									if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+								checkPos = labelEnd * nEdge + i;
+								lazyUpdate(labelEnd, checkPos, i);//update aft
+								if (aft[checkPos] != -MYINFINITE) {
+									if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 										newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 										MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 										newEIntR->emplace_back(rd4);
@@ -2120,14 +2154,14 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 										}
 										else {
 											int tempTimestampPos = (intv.second - startT)*nEdge + i;
-											if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 												preMaxEMaxIntvlEndT = intv.second;
 												preMaxEMaxIntvlStartT = intv.first;
 											}
 										}
 									}
 
-									if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+									if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 										if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 										if (EMaxIntvlEndT < lastMainLabelT) {
 											maxIntv[i].first = intvB;
@@ -2157,7 +2191,7 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 										else {
 											int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-											if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 												preMaxEMaxIntvlEndT = intv.second;
 												preMaxEMaxIntvlStartT = intv.first;
 											}
@@ -2218,11 +2252,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
-
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -2267,12 +2301,16 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp){
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -2285,11 +2323,15 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 		else if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
 		if (lastMainLabelPos < endPos) {
 
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -2341,27 +2383,27 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -2385,11 +2427,15 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 			}
 		}
 		else {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -2421,11 +2467,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -2486,7 +2532,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
 		//auto beginTest = std::chrono::steady_clock::now();
 		
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
 
@@ -2497,8 +2543,8 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 		
 		if (currentPos != 0) {
 
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 					continue;
 				}
 				else {
@@ -2530,7 +2576,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 						}
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -2603,7 +2649,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -2613,11 +2659,11 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -2633,13 +2679,13 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -2661,13 +2707,13 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -2688,7 +2734,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -2827,21 +2873,21 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									/*if (Test::testingMode == 3) {
 										if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
+											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
 										}
 										else {
-											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
+											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
 										}
 									}*/
 									if (EMaxIntvlEndT < lastMainLabelT) {
@@ -2872,7 +2918,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -2881,8 +2927,8 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 								if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 								}
-								/*if (Test::testingMode ==  3 && maxIntv[i].second != -1 && eW[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
-									cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
+								/*if (Test::testingMode ==  3 && maxIntv[i].second != -1 && lab[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
+									cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
 								}*/
 								if (EMaxIntvlEndT < lastMainLabelT) {
 									maxIntv[i].first = intvB;
@@ -2936,7 +2982,7 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -3001,8 +3047,8 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
 		currentT = lastMainLabelPos + startT;
 		if (currentT == maxIntv[i].second) {
-			/*if (Test::testingMode == 3 && maxIntv[i].second != -1 && eW[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
-				cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+			/*if (Test::testingMode == 3 && maxIntv[i].second != -1 && lab[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
+				cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 			}*/
 			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
 				auto& intv = preEMaxIntvlPtr.q[temp];
@@ -3028,25 +3074,25 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				/*if (Test::testingMode == 3) {
 					if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 					}
 					else {
-						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 					}
 				}*/
 				if (maxEMaxIntvlEndT < currentT) {
@@ -3079,11 +3125,11 @@ void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -3139,7 +3185,7 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
 		//auto beginTest = std::chrono::steady_clock::now();
 
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
 
@@ -3149,8 +3195,8 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
 		if (currentPos != 0) {
 
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 					continue;
 				}
 				else {
@@ -3182,7 +3228,7 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 						}
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -3253,7 +3299,7 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -3263,11 +3309,11 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -3282,13 +3328,13 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -3310,13 +3356,13 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -3333,11 +3379,12 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 						while (forbidIntv != nullptr) {
 
 							forbidTimeStartT = -1;
+							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -3380,16 +3427,19 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 								tempT = nextLabT;
 								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
+									if (tempT <= stopT) {
+										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+									}
 								}
 								else {
-									if (tempT <= stopT)
+									if (tempT <= stopT)	{
+										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+									}
 								}
 							}
 							if (forbidTimeStartT != -1) {
-								//now.vioT.addNodeAft(tempIntv, make_pair(forbidTimeStartT,
 								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
 									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
 									tempIntv = tempIntv->next;
@@ -3444,12 +3494,15 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 						}
 					}
 					if (currentPos + 1 == currNTimestamp/* || MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT)*nEdge + i], 1) - 1;
-
+						int checkPos = (lastMainLabelT - startT)*nEdge + i;
+						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 						//dynamic
 						if (localNoise <= Setting::c) {
-							if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-								if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+							checkPos = labelEnd * nEdge + i;
+							lazyUpdate(labelEnd, checkPos, i);//update aft
+							if (aft[checkPos] != -MYINFINITE) {
+								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 									newEIntR->emplace_back(rd4);
@@ -3496,14 +3549,14 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									if (EMaxIntvlEndT < lastMainLabelT) {
 										maxIntv[i].first = intvB;
@@ -3533,7 +3586,7 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -3592,10 +3645,11 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
 
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -3640,12 +3694,16 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -3654,11 +3712,15 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 		scanT[mainLabelPos] = nextLabPos - 1;
 
 		if (lastMainLabelPos < endPos) {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -3708,27 +3770,27 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -3751,10 +3813,14 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 		}
 		else {
 			//dynamic
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -3785,11 +3851,11 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -3855,7 +3921,7 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 		int i = *fromMidRIter;
 		labelPosForEdge = i * numOfLabel;
 
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
 		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
@@ -3871,13 +3937,13 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 
 			//recover localNoise , noiseNum and lastMainLabelPos
 			int timestampPosForEL = currentPos * nEdge + i;
-			edgeType = eW[timestampPosForEL];
+			edgeType = lab[timestampPosForEL];
 			if (edgeType != mainLabel) {
 				int eLvalue = max(bef[timestampPosForEL], 1);
 				int tempTPos = timestampPosForEL - eLvalue * nEdge;
 				int tempPosForLabels = currentPos - eLvalue;
 				localNoise = eLvalue;
-				while (eW[tempTPos] != mainLabel) {
+				while (lab[tempTPos] != mainLabel) {
 					eLvalue = max(bef[tempTPos], 1);
 					tempPosForLabels -= eLvalue;
 					localNoise += eLvalue;
@@ -3893,7 +3959,7 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 			if (maxIntv[i].second == -1) {
 				lastMainLabelPos = beginPos;
 			}
-			else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+			else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 				lastMainLabelPos = max(maxIntv[i].second, beginPos);
 			}
 			else {
@@ -3903,11 +3969,11 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 					int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 					for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 					}
 					if (temp == preEMaxIntvlPtr.front) {
 						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 					}
 				}
 				lastMainLabelPos = max(EMaxIntvlEndT, beginPos);
@@ -3928,8 +3994,8 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 		else {
 			if (currentPos != 0) {
 
-				if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-					if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+				if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+					if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 						continue;
 					}
 					else {
@@ -3964,7 +4030,7 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 							}
 
 							int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-							if (eW[tempEWPos] == mainLabel) {
+							if (lab[tempEWPos] == mainLabel) {
 								intvItem->item.second++;
 							}
 							else {
@@ -4036,7 +4102,7 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 					if (maxIntv[i].second == -1) {
 						EMaxIntvlEndT = -1;
 					}
-					else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+					else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 						EMaxIntvlEndT = maxIntv[i].second;
 					}
 					else {
@@ -4046,11 +4112,11 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 							int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 							for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 							}
 							if (temp == preEMaxIntvlPtr.front) {
 								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 							}
 						}
 					}
@@ -4065,13 +4131,13 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 						if (forbidIntv == nullptr) {//does not need update
 							if (currentPos != currNTimestamp) {
 								int timestampPosForEL = currentPos * nEdge + i;
-								edgeType = eW[timestampPosForEL];
+								edgeType = lab[timestampPosForEL];
 								if (edgeType != mainLabel) {
 									int eLvalue = max(bef[timestampPosForEL], 1);
 									int tempTPos = timestampPosForEL - eLvalue * nEdge;
 									int tempPosForLabels = currentPos - eLvalue;
 									localNoise = eLvalue;
-									while (eW[tempTPos] != mainLabel) {
+									while (lab[tempTPos] != mainLabel) {
 										eLvalue = max(bef[tempTPos], 1);
 										tempPosForLabels -= eLvalue;
 										localNoise += eLvalue;
@@ -4093,13 +4159,13 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 							int tempPos = tempT - startT, intvLen = tempT - intvB;
 							labelsSum = tempT - intvB;
 							int tempTimestampPosForEL = tempPos * nEdge + i;
-							edgeType = eW[tempTimestampPosForEL];
+							edgeType = lab[tempTimestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[tempTimestampPosForEL], 1);
 								int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = tempPos - eLvalue;
 								localNoise = eLvalue - 1;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -4116,11 +4182,12 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 							while (forbidIntv != nullptr) {
 
 								forbidTimeStartT = -1;
+								lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 								int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 								while (tempT <= stopT) {
 
 									intvLen = nextLabT - tempT;
-									edgeType = eW[tempTimestampPosForEL];
+									edgeType = lab[tempTimestampPosForEL];
 									if (edgeType == mainLabel) {
 										localNoise = 0;
 										minNoise = Setting::delta * (labelsSum + 1);
@@ -4165,12 +4232,16 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 									tempT = nextLabT;
 									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 									if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-										if (tempT <= stopT)
+										if (tempT <= stopT) {
+											lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 											nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+										}
 									}
 									else {
-										if (tempT <= stopT)
+										if (tempT <= stopT) {
+											lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 											nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+										}
 									}
 								}
 								if (forbidTimeStartT != -1) {
@@ -4228,11 +4299,15 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 							}
 						}
 						if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-							int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT)*nEdge + i], 1) - 1;
+							int checkPos = (lastMainLabelT - startT)*nEdge + i;
+							lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+							int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 							//dynamic
 							if (localNoise <= Setting::c) {
-								if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-									if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+								checkPos = labelEnd * nEdge + i;
+								lazyUpdate(labelEnd, checkPos, i);//update aft
+								if (aft[checkPos] != -MYINFINITE) {
+									if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 										newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 										MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 										newEIntR->emplace_back(rd4);
@@ -4284,14 +4359,14 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 										}
 										else {
 											int tempTimestampPos = (intv.second - startT)*nEdge + i;
-											if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 												preMaxEMaxIntvlEndT = intv.second;
 												preMaxEMaxIntvlStartT = intv.first;
 											}
 										}
 									}
 
-									if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+									if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 										if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 										if (EMaxIntvlEndT < lastMainLabelT) {
 											maxIntv[i].first = intvB;
@@ -4322,7 +4397,7 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 										else {
 											int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-											if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 												preMaxEMaxIntvlEndT = intv.second;
 												preMaxEMaxIntvlStartT = intv.first;
 											}
@@ -4382,10 +4457,11 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
 
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -4430,12 +4506,16 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -4447,11 +4527,15 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 			posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
 		else if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
 		if (lastMainLabelPos < endPos) {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -4503,27 +4587,27 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -4549,10 +4633,14 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 		}
 		else {
 			//dynamic
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -4583,11 +4671,11 @@ void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -4649,11 +4737,11 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 	int timestampPosForEMaxIntvlEndT;
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
 		
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 
 		saveNoNoise = false;
-		edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
+		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
 		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) >= intvLenNoNoise) {
 			int intvStart = filterE - max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) + 1;
 			int j = timePos + 1;
@@ -4685,8 +4773,8 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
 
 		if (currentPos != 0) {
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 					if (saveNoNoise) {
 						newE[newENum++] = i;
 					}
@@ -4722,7 +4810,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 						}
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -4794,7 +4882,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -4804,11 +4892,11 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -4824,13 +4912,13 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -4852,13 +4940,13 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -4879,7 +4967,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -5011,14 +5099,14 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									if (EMaxIntvlEndT < lastMainLabelT) {
 										maxIntv[i].first = intvB;
@@ -5048,7 +5136,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -5110,7 +5198,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -5202,27 +5290,27 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[eW[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -5254,11 +5342,11 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -5319,11 +5407,11 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 
 	int timestampPosForEMaxIntvlEndT;
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		
 		saveNoNoise = false;
-		edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
+		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
 		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) >= intvLenNoNoise) {
 			int intvStart = filterE - max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) + 1;
 			int j = timePos + 1;
@@ -5338,7 +5426,8 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 			else {
 				maxIntvShortIntv[i].first = intvStart;
 				selectedNumShortIntv++;
-
+				
+				lazyUpdate(filterE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
 				int check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
 				maxIntvShortIntv[i].second = timePos + check;
 				check = min(check, limited);
@@ -5356,8 +5445,8 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 		
 		if (currentPos != 0) {
 
-			if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 					if (saveNoNoise) {
 						newE[newENum++] = i;
 					}
@@ -5392,7 +5481,7 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 						}
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (eW[tempEWPos] == mainLabel) {
+						if (lab[tempEWPos] == mainLabel) {
 							intvItem->item.second++;
 						}
 						else {
@@ -5463,7 +5552,7 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 				if (maxIntv[i].second == -1) {
 					EMaxIntvlEndT = -1;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					EMaxIntvlEndT = maxIntv[i].second;
 				}
 				else {
@@ -5473,11 +5562,11 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 				}
@@ -5492,13 +5581,13 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
 							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = eW[timestampPosForEL];
+							edgeType = lab[timestampPosForEL];
 							if (edgeType != mainLabel) {
 								int eLvalue = max(bef[timestampPosForEL], 1);
 								int tempTPos = timestampPosForEL - eLvalue * nEdge;
 								int tempPosForLabels = currentPos - eLvalue;
 								localNoise = eLvalue;
-								while (eW[tempTPos] != mainLabel) {
+								while (lab[tempTPos] != mainLabel) {
 									eLvalue = max(bef[tempTPos], 1);
 									tempPosForLabels -= eLvalue;
 									localNoise += eLvalue;
@@ -5520,13 +5609,13 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 						int tempPos = tempT - startT, intvLen = tempT - intvB;
 						labelsSum = tempT - intvB;
 						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = eW[tempTimestampPosForEL];
+						edgeType = lab[tempTimestampPosForEL];
 						if (edgeType != mainLabel) {
 							int eLvalue = max(bef[tempTimestampPosForEL], 1);
 							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 							int tempPosForLabels = tempPos - eLvalue;
 							localNoise = eLvalue - 1;
-							while (eW[tempTPos] != mainLabel) {
+							while (lab[tempTPos] != mainLabel) {
 								eLvalue = max(bef[tempTPos], 1);
 								tempPosForLabels -= eLvalue;
 								localNoise += eLvalue;
@@ -5543,11 +5632,12 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 						while (forbidIntv != nullptr) {
 
 							forbidTimeStartT = -1;
+							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 							while (tempT <= stopT) {
 
 								intvLen = nextLabT - tempT;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType == mainLabel) {
 									localNoise = 0;
 									minNoise = Setting::delta * (labelsSum + 1);
@@ -5590,12 +5680,16 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 								tempT = nextLabT;
 								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
+									if (tempT <= stopT) {
+										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+									}
 								}
 								else {
-									if (tempT <= stopT)
+									if (tempT <= stopT) {
+										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+									}
 								}
 							}
 							if (forbidTimeStartT != -1) {
@@ -5653,11 +5747,15 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 						}
 					}
 					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT)*nEdge + i], 1) - 1;
+						int checkPos = (lastMainLabelT - startT)*nEdge + i;
+						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 						//dynamic
 						if (localNoise <= Setting::c) {
-							if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-								if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+							checkPos = labelEnd * nEdge + i;
+							lazyUpdate(labelEnd, checkPos, i);//update aft
+							if (aft[checkPos] != -MYINFINITE) {
+								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 									newEIntR->emplace_back(rd4);
@@ -5705,14 +5803,14 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 									}
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
 									}
 								}
 
-								if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									if (EMaxIntvlEndT < lastMainLabelT) {
 										maxIntv[i].first = intvB;
@@ -5742,7 +5840,7 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 									else {
 										int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-										if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 											preMaxEMaxIntvlEndT = intv.second;
 											preMaxEMaxIntvlStartT = intv.first;
 										}
@@ -5801,10 +5899,11 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
 
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -5848,12 +5947,16 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -5863,11 +5966,15 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 
 
 		if (lastMainLabelPos < endPos) {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -5920,27 +6027,27 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -5964,10 +6071,14 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 		}
 		else {
 			//dynamic
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -5997,11 +6108,11 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -6068,7 +6179,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 		
 		labelPosForEdge = i * numOfLabel;
 
-		mainLabel = eW[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
+		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 
 		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
@@ -6082,7 +6193,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 		}
 		else {
 			saveNoNoise = false;
-			edgeType = eW[TGraph::posUsedForEdgeFilterShortIntv + i];
+			edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];
 			/*not exists the maximum interval containing [intvB,intvE] for case 1 and 2
 				put here for less time*/
 			if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) >= intvLenNoNoise) {
@@ -6102,6 +6213,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 					maxIntvShortIntv[i].first = intvStart;
 					selectedNumShortIntv++;
 
+					lazyUpdate(filterE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
 					int check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
 					maxIntvShortIntv[i].second = timePos + check + startT;
 
@@ -6119,13 +6231,13 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 
 				//recover localNoise , noiseNum and lastMainLabelPos
 				int timestampPosForEL = currentPos * nEdge + i;
-				edgeType = eW[timestampPosForEL];
+				edgeType = lab[timestampPosForEL];
 				if (edgeType != mainLabel) {
 					int eLvalue = max(bef[timestampPosForEL], 1);
 					int tempTPos = timestampPosForEL - eLvalue * nEdge;
 					int tempPosForLabels = currentPos - eLvalue;
 					localNoise = eLvalue;
-					while (eW[tempTPos] != mainLabel) {
+					while (lab[tempTPos] != mainLabel) {
 						eLvalue = max(bef[tempTPos], 1);
 						tempPosForLabels -= eLvalue;
 						localNoise += eLvalue;
@@ -6141,7 +6253,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				if (maxIntv[i].second == -1) {
 					lastMainLabelPos = beginPos;
 				}
-				else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 					lastMainLabelPos = max(maxIntv[i].second, beginPos);
 				}
 				else {
@@ -6151,11 +6263,11 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 							EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 						}
 						if (temp == preEMaxIntvlPtr.front) {
 							EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-							if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 						}
 					}
 					lastMainLabelPos = max(EMaxIntvlEndT, beginPos);
@@ -6176,8 +6288,8 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 			else {
 				if (currentPos != 0) {
 
-					if (mainLabel == eW[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-						if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || eW[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
+					if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+						if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 							if (saveNoNoise) {
 								newE[newENum++] = i; 
 								posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R for edge i is changed
@@ -6220,7 +6332,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 								}
 
 								int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-								if (eW[tempEWPos] == mainLabel) {
+								if (lab[tempEWPos] == mainLabel) {
 									intvItem->item.second++;
 								}
 								else {
@@ -6302,7 +6414,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 						if (maxIntv[i].second == -1) {
 							EMaxIntvlEndT = -1;
 						}
-						else if (eW[timestampPosForEMaxIntvlEndT] == mainLabel) {
+						else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
 							EMaxIntvlEndT = maxIntv[i].second;
 						}
 						else {
@@ -6312,11 +6424,11 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 								int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
 								for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
 									tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-									if (eW[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
+									if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
 								}
 								if (temp == preEMaxIntvlPtr.front) {
 									tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-									if (eW[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
+									if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
 								}
 							}
 						}
@@ -6332,13 +6444,13 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 							if (forbidIntv == nullptr) {//does not need update
 								if (currentPos != currNTimestamp) {
 									int timestampPosForEL = currentPos * nEdge + i;
-									edgeType = eW[timestampPosForEL];
+									edgeType = lab[timestampPosForEL];
 									if (edgeType != mainLabel) {
 										int eLvalue = max(bef[timestampPosForEL], 1);
 										int tempTPos = timestampPosForEL - eLvalue * nEdge;
 										int tempPosForLabels = currentPos - eLvalue;
 										localNoise = eLvalue;
-										while (eW[tempTPos] != mainLabel) {
+										while (lab[tempTPos] != mainLabel) {
 											eLvalue = max(bef[tempTPos], 1);
 											tempPosForLabels -= eLvalue;
 											localNoise += eLvalue;
@@ -6360,13 +6472,13 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 								int tempPos = tempT - startT, intvLen = tempT - intvB;
 								labelsSum = tempT - intvB;
 								int tempTimestampPosForEL = tempPos * nEdge + i;
-								edgeType = eW[tempTimestampPosForEL];
+								edgeType = lab[tempTimestampPosForEL];
 								if (edgeType != mainLabel) {
 									int eLvalue = max(bef[tempTimestampPosForEL], 1);
 									int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
 									int tempPosForLabels = tempPos - eLvalue;
 									localNoise = eLvalue - 1;
-									while (eW[tempTPos] != mainLabel) {
+									while (lab[tempTPos] != mainLabel) {
 										eLvalue = max(bef[tempTPos], 1);
 										tempPosForLabels -= eLvalue;
 										localNoise += eLvalue;
@@ -6383,11 +6495,12 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 								while (forbidIntv != nullptr) {
 
 									forbidTimeStartT = -1;
+									lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 									int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
 									while (tempT <= stopT) {
 
 										intvLen = nextLabT - tempT;
-										edgeType = eW[tempTimestampPosForEL];
+										edgeType = lab[tempTimestampPosForEL];
 										if (edgeType == mainLabel) {
 											localNoise = 0;
 											minNoise = Setting::delta * (labelsSum + 1);
@@ -6435,12 +6548,16 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 										tempT = nextLabT;
 										tempTimestampPosForEL = (tempT - startT) * nEdge + i;
 										if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-											if (tempT <= stopT)
+											if (tempT <= stopT) {
+												lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
 												nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+											}
 										}
 										else {
-											if (tempT <= stopT)
+											if (tempT <= stopT) {
+												lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
 												nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+											}
 										}
 									}
 									if (forbidTimeStartT != -1) {
@@ -6499,11 +6616,15 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 								}
 							}
 							if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-								int labelEnd = lastMainLabelT - startT + max(aft[(lastMainLabelT - startT)*nEdge + i], 1) - 1;
+								int checkPos = (lastMainLabelT - startT)*nEdge + i;
+								lazyUpdate(lastMainLabelT, checkPos, i);//update aft
+								int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 								//dynamic
 								if (localNoise <= Setting::c) {
-									if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-										if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+									checkPos = labelEnd * nEdge + i;
+									lazyUpdate(labelEnd, checkPos, i);//update aft
+									if (aft[checkPos] != -MYINFINITE) {
+										if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 											newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 											MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 											newEIntR->emplace_back(rd4);
@@ -6557,14 +6678,14 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 											}
 											else {
 												int tempTimestampPos = (intv.second - startT)*nEdge + i;
-												if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+												if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 													preMaxEMaxIntvlEndT = intv.second;
 													preMaxEMaxIntvlStartT = intv.first;
 												}
 											}
 										}
 
-										if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+										if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 											if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 											if (EMaxIntvlEndT < lastMainLabelT) {
 												maxIntv[i].first = intvB;
@@ -6596,7 +6717,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 											else {
 												int tempTimestampPos = (intv.second - startT)*nEdge + i;
 
-												if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+												if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 													preMaxEMaxIntvlEndT = intv.second;
 													preMaxEMaxIntvlStartT = intv.first;
 												}
@@ -6668,10 +6789,11 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
 
+		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
 		while (currentPos < currNTimestamp) {
 			intvLen = nextLabPos - currentPos;
-			edgeType = eW[tempTimestampPosForIT];
+			edgeType = lab[tempTimestampPosForIT];
 			if (edgeType == mainLabel) {
 				localNoise = 0;
 				minNoise = Setting::delta * (labelsSum + 1);
@@ -6716,12 +6838,16 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 			currentPos = nextLabPos;
 			tempTimestampPosForIT = currentPos * nEdge + i;
 			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
 					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+				}
 			}
 			else {
-				if (currentPos < currNTimestamp)
+				if (currentPos < currNTimestamp) {
+					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
 					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+				}
 			}
 		}
 		if (forbidTimeStartT != -1) {
@@ -6733,11 +6859,15 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 			posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
 		else if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
 		if (lastMainLabelPos < endPos) {
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -6799,27 +6929,27 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
 				}
 			}
 
-			if (eW[timestampPosForEMaxIntvlEndT] != mainLabel) {
+			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
 					/*if (Test::testingMode == 3) {
 						Test::containment++;
 						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << eW[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
+							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
 						}
 					}*/
 					maxIntv[i].first = intvB;
@@ -6845,10 +6975,14 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 		}
 		else {
 			//dynamic
-			int labelEnd = lastMainLabelPos + max(aft[lastMainLabelPos*nEdge + i], 1) - 1;
+			int checkPos = lastMainLabelPos * nEdge + i;
+			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
+			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			if (localNoise <= Setting::c) {
-				if (aft[labelEnd*nEdge + i] != -MYINFINITE) {
-					if (-aft[labelEnd*nEdge + i] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				checkPos = labelEnd * nEdge + i;
+				lazyUpdate(labelEnd, checkPos, i);//update aft
+				if (aft[checkPos] != -MYINFINITE) {
+					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
 						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
 						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
 						newEIntR->emplace_back(rd4);
@@ -6880,11 +7014,11 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				}
 				else {
 					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (eW[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
 						maxEMaxIntvlEndT = intv.second;
 						maxEMaxIntvlStartT = intv.first;
 					}
-					if (eW[tempTimestampPos] == eW[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
 						preMaxEMaxIntvlEndT = intv.second;
 						preMaxEMaxIntvlStartT = intv.first;
 					}
@@ -6943,16 +7077,16 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int s
 	for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter) {
 		edgeId = *edgeIter;
 		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = eW[mainLabelPos*nEdge + edgeId];
+		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForEndTime = endTimePos * nEdge + edgeId;
-		if (label != eW[tempPosForEndTime]) {
+		if (label != lab[tempPosForEndTime]) {
 			return false;
 		}
 		p = startTimePos2;
 		int tempstampPosForEL = p * nEdge + edgeId;
 		next = p - max(bef[tempstampPosForEL], 1);
 		while (p >= startTimePos1) {
-			if (label != eW[tempstampPosForEL]) {
+			if (label != lab[tempstampPosForEL]) {
 				int stopP = max(next + 1, startTimePos1);
 				for (int tabu = p; tabu >= stopP; tabu--) {
 					if (expandMask[tabu - startTimePos1]) {
@@ -7007,16 +7141,16 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int*&
 		if (*subCCIter != -1) {
 			edgeId = *edgeIter;
 			//timestampPosForLabels = edgeId * allNTimestamp;
-			label = eW[mainLabelPos*nEdge + edgeId];
+			label = lab[mainLabelPos*nEdge + edgeId];
 			int tempPosForEndTime = endTimePos * nEdge + edgeId;
-			if (label != eW[tempPosForEndTime]) {
+			if (label != lab[tempPosForEndTime]) {
 				return false;
 			}
 			p = startTimePos2;
 			int tempstampPosForEL = p * nEdge + edgeId;
 			next = p - max(bef[tempstampPosForEL], 1);
 			while (p >= startTimePos1) {
-				if (label != eW[tempstampPosForEL]) {
+				if (label != lab[tempstampPosForEL]) {
 					int stopP = max(next + 1, startTimePos1);
 					for (int tabu = p; tabu >= stopP; tabu--) {
 						if (expandMask[tabu - startTimePos1]) {
@@ -7071,16 +7205,16 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& subCCs, vec(
 	for (auto subCCIter = subCCs.begin(); subCCIter != subCCEnd; ++subCCIter) {
 		edgeId = edges[*subCCIter];
 		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = eW[mainLabelPos*nEdge + edgeId];
+		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForEndTime = endTimePos * nEdge + edgeId;
-		if (label != eW[tempPosForEndTime]) {
+		if (label != lab[tempPosForEndTime]) {
 			return false;
 		}
 		p = startTimePos2;
 		int tempstampPosForEL = p * nEdge + edgeId;
 		next = p - max(bef[tempstampPosForEL],1);
 		while (p >= startTimePos1) {
-			if (label != eW[tempstampPosForEL]) {
+			if (label != lab[tempstampPosForEL]) {
 				int stopP = max(next + 1, startTimePos1);
 				for (int tabu = p; tabu >= stopP; tabu--) {
 					if (expandMask[tabu - startTimePos1]) {
@@ -7134,9 +7268,9 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(in
 	for (auto subCCIter = subCCs.begin(); subCCIter != subCCEnd; ++subCCIter) {
 		edgeId = edges[*subCCIter];
 		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = eW[mainLabelPos*nEdge + edgeId];
+		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForStartTime = startTimePos * nEdge + edgeId;
-		if (label != eW[tempPosForStartTime]) {
+		if (label != lab[tempPosForStartTime]) {
 			return false;
 		}
 		p = endTimePos2;
@@ -7144,7 +7278,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(in
 		next = p - max(bef[tempstampPosForEL],1);
 		while (p >= endTimePos1) {
 			
-			if (label != eW[tempstampPosForEL]) {
+			if (label != lab[tempstampPosForEL]) {
 				int stopP = max(next + 1, endTimePos1);
 				for (int tabu = p; tabu >= stopP; tabu--) {
 					if (expandMask[tabu - endTimePos1]) {
@@ -7198,16 +7332,16 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int sta
 	for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter) {
 		edgeId = *edgeIter;
 		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = eW[mainLabelPos*nEdge + edgeId];
+		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForStartTime = startTimePos * nEdge + edgeId;
-		if (label != eW[tempPosForStartTime]) {
+		if (label != lab[tempPosForStartTime]) {
 			return false;
 		}
 		p = endTimePos2;
 		int tempstampPosForEL = p * nEdge + edgeId;
 		next = p - max(bef[tempstampPosForEL],1);
 		while (p >= endTimePos1) {
-			if (label != eW[tempstampPosForEL]) {
+			if (label != lab[tempstampPosForEL]) {
 				
 				int stopP = max(next + 1, endTimePos1);
 				
@@ -7265,16 +7399,16 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int*&su
 		if (*subCCIter != -1) {
 			edgeId = *edgeIter;
 			//timestampPosForLabels = edgeId * allNTimestamp;
-			label = eW[mainLabelPos*nEdge + edgeId];
+			label = lab[mainLabelPos*nEdge + edgeId];
 			int tempPosForStartTime = startTimePos * nEdge + edgeId;
-			if (label != eW[tempPosForStartTime]) {
+			if (label != lab[tempPosForStartTime]) {
 				return false;
 			}
 			p = endTimePos2;
 			int tempstampPosForEL = p * nEdge + edgeId;
 			next = p - max(bef[tempstampPosForEL], 1);
 			while (p >= endTimePos1) {
-				if (label != eW[tempstampPosForEL]) {
+				if (label != lab[tempstampPosForEL]) {
 
 					int stopP = max(next + 1, endTimePos1);
 

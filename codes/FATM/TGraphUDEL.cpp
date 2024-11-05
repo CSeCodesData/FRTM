@@ -3,11 +3,11 @@
 
 TGraphUDEL::TGraphUDEL(const TGraphUDEL& ances):TGraph(ances) {
 	int size = nEdge * allNTimestamp;
-	eW = DBG_NEW int[size];
+	lab = DBG_NEW int[size];
 	bef = DBG_NEW int[size];
 	aft = DBG_NEW int[size];
 	for (int i = 0; i < size; i++) {
-		eW[i] = ances.eW[i];
+		lab[i] = ances.lab[i];
 		bef[i] = ances.bef[i];
 		aft[i] = ances.aft[i];
 	}
@@ -16,14 +16,13 @@ TGraphUDEL::TGraphUDEL(const TGraphUDEL& ances):TGraph(ances) {
 void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 	int size = allNTimestamp * nEdge, timestampPosForEL, timestampPosForELBre;
 
-	eW = DBG_NEW int[size];
+	lab = DBG_NEW int[size];
 	bef = DBG_NEW int[size];
 	aft = DBG_NEW int[size];
 	for (int i = 0; i < size; i++) {
-		eW[i] = 0x7fffffff;
+		lab[i] = 0x7fffffff;
 	}
 	
-	//unordered_map<int, bool> nodeHashmap;//hashmap for recording node id 
 	int nodeNum = 0;//node num
 	int flagT = -1;//check the same time as the first input data
 	int u, v, t;
@@ -105,11 +104,11 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		Edge e(u, v);
 		int edgeInd = edge2ind->find(e)->id;
 		timestampPosForEL = t * nEdge + edgeInd;
-		if (eW[timestampPosForEL] == 0x7fffffff) {
+		if (lab[timestampPosForEL] == 0x7fffffff) {
 			timestampPosForELBre = timestampPosForEL - nEdge;
-			eW[timestampPosForEL] = w;
+			lab[timestampPosForEL] = w;
 			if (t == 0) bef[edgeInd] = 1;
-			else if (w == eW[timestampPosForELBre]) {
+			else if (w == lab[timestampPosForELBre]) {
 				bef[timestampPosForEL] = bef[timestampPosForELBre] + 1;
 			}
 			else bef[timestampPosForEL] = 1;
@@ -155,7 +154,7 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		CLEARALL(tempLabelsNum, 0, numOfLabel, int);
 		timestampPos = 0;
 		for (int j = 0; j < currNTimestamp; j++, timestampPos += nEdge) {
-			int labelId = eW[timestampPos + id];
+			int labelId = lab[timestampPos + id];
 			tempLabelsNum[labelId]++;
 			dif[timestampPos + id] = j + 1 - tempLabelsNum[labelId];
 		}
@@ -247,12 +246,11 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 		Edge e(u, v);
 		int edgeInd = edge2ind->find(e)->id;
 		int timestampPosForEL = t * nEdge + edgeInd;
-		if (eW[timestampPosForEL] == 0x7fffffff) {
+		if (lab[timestampPosForEL] == 0x7fffffff) {
 			int timestampPosForELBre = timestampPosForEL - nEdge;
-			eW[timestampPosForEL] = w;
-			if (w == eW[timestampPosForELBre]) {
+			lab[timestampPosForEL] = w; //update lab_t for t in [T+1,T+delta T]
+			if (w == lab[timestampPosForELBre]) {  //update positive value of bef_t for t in [T+1,T+delta T]
 				bef[timestampPosForEL] = max(bef[timestampPosForELBre],1) + 1;
-				//maxIntervalLength = max(maxIntervalLength, bef[timestampPosForEL]);
 			}
 			else bef[timestampPosForEL] = 1;
 		}
@@ -261,21 +259,27 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 	int intvE, intvS;
 	int posForELabel = 0;
 	int* tempLabelsNum = DBG_NEW int[numOfLabel];
-	//int* maxNoiseNum = DBG_NEW int[numOfLabel];
 	int timestampPos = 0;
 	for (int id = 0; id < nEdge; id++, posForELabel += numOfLabel) {//O(E)
 		
 		intvE = currNTimestamp - 1;
-		while (intvE > fixedE) {
+		while (intvE > fixedE) { //update positive value of aft_t for t in [T+1,T+delta T]
 			intvS = intvE - bef[intvE*nEdge + id] + 1;
-			for (int intvP = intvS; intvP <= intvE; intvP++) {
+			/*for (int intvP = intvS; intvP <= intvE; intvP++) {
 				aft[intvP*nEdge + id] = intvE - intvP + 1;
+			}*/
+			for (int intvP = fixedE + 1; intvP <= intvE; intvP++) {
+				aft[intvP*nEdge + id] = intvE - intvP + 1;
+				//if(id == 1)cout << intvP << " " << aft[intvP*nEdge + id] << endl;
+			}
+			if (intvS <= fixedE) { //at most |L| times
+				aft[intvS*nEdge + id] = intvE - intvS + 1; 
+				//if (id == 1)cout << intvS << " " << aft[intvS*nEdge + id] << endl;
 			}
 			intvE = intvS - 1;
 		}
 		
 		CLEARALL(tempLabelsNum, 0, numOfLabel, int);
-		//CLEARALL(maxNoiseNum, 0, numOfLabel, int);
 		for (int lab = 0; lab < numOfLabel; lab++) {
 			int lastP = tail[posForELabel + lab];
 			if (lastP >= 0)
@@ -283,9 +287,8 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 			else
 				tempLabelsNum[lab] = 0;
 		}
-
-		//intvS = fixedE;
-		while (intvS < currNTimestamp) {
+		
+		while (intvS < currNTimestamp) { //update tail_lab and negative values of bef_t and aft_t (for aft_t, t may <= T, at most |L| times)
 			int lab = getEdgeLabel(id, intvS);
 			intvE = intvS + aft[intvS*nEdge + id] - 1;
 			if (intvS > fixedE) {
@@ -293,17 +296,19 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 					bef[intvS*nEdge + id] = -MYINFINITE;
 				}
 				else {
+					//if (id == 1)cout << tail[posForELabel + lab] << " ! " << tail[posForELabel + lab] - intvS << endl;
 					bef[intvS*nEdge + id] = aft[tail[posForELabel + lab] * nEdge + id] = tail[posForELabel + lab] - intvS;
 				}
 			}
 			tail[posForELabel + lab] = intvE;
 			aft[intvE * nEdge + id] = -MYINFINITE;
+			//if (id == 1)cout << intvE << " @ " << -MYINFINITE << endl;
 			intvS = intvE + 1;
 		}
 
 		timestampPos = (fixedE + 1) * nEdge;
-		for (int j = fixedE + 1; j < currNTimestamp; j++, timestampPos += nEdge) {
-			int labelId = eW[timestampPos + id];
+		for (int j = fixedE + 1; j < currNTimestamp; j++, timestampPos += nEdge) { //update dif_t for t in [T+1,T+delta T]
+			int labelId = lab[timestampPos + id];
 			tempLabelsNum[labelId]++;
 			dif[timestampPos + id] = j + 1 - tempLabelsNum[labelId];
 		}
@@ -329,7 +334,7 @@ void TGraphUDEL::edgeFilter(int intvB, int intvE,
 	int endPos = endT - startT;
 	int intvStart;
 	for (int i = 0; i < nEdge; i++) {
-		edgeType = eW[TGraph::posUsedForEdgeFilter + i];
+		edgeType = lab[TGraph::posUsedForEdgeFilter + i];
 		/*not exists the maximum interval containing [intvB,intvE] for case 1 and 2
 			put here for less time*/
 		if (max(bef[TGraph::posUsedForEdgeFilter + i],1) < intvLen /*||

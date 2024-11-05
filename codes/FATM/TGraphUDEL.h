@@ -23,7 +23,7 @@ public:
 
 	virtual ~TGraphUDEL(){
 		delete[]bef;
-		delete[]eW; 
+		delete[]lab; 
 		delete[]aft; 
 		delete[] dif;
 		delete[] tail;
@@ -31,17 +31,17 @@ public:
 
 	/*get the label of edge with edgeId at the timePos (time-startT)*/
 	int getEdgeLabel(int edgeId, int timePos) {
-		return eW[timePos*nEdge + edgeId];
+		return lab[timePos*nEdge + edgeId];
 	}
 
 	//has same label at timePos1 and timePos2
 	bool isSameLabel(int edgeId, int timePos1, int timePos2) {
-		return eW[timePos1*nEdge + edgeId] == eW[timePos2*nEdge + edgeId];
+		return lab[timePos1*nEdge + edgeId] == lab[timePos2*nEdge + edgeId];
 	}
 	bool bothSameLabel(vec(int)& edges, int timePos1, int timePos2) {
 		auto edgeEnd = edges.end();
 		for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter) {
-			if (eW[timePos1*nEdge + *edgeIter] != eW[timePos2*nEdge + *edgeIter]) {
+			if (lab[timePos1*nEdge + *edgeIter] != lab[timePos2*nEdge + *edgeIter]) {
 				return false;
 			}
 		}
@@ -53,7 +53,7 @@ public:
 		int edgeId;
 		for (auto subCCIter = subCCs.begin(); subCCIter != subCCEnd; ++subCCIter) {
 			edgeId = edges[*subCCIter];
-			if (eW[timePos1*nEdge + edgeId] != eW[timePos2*nEdge + edgeId]) {
+			if (lab[timePos1*nEdge + edgeId] != lab[timePos2*nEdge + edgeId]) {
 				return false;
 			}
 		}
@@ -71,6 +71,14 @@ public:
 	void updateDS(const char* src, int fixedE, int newFixedE);
 	#pragma endregion
 
+	inline void lazyUpdate(int t, int pos, int edgeId) {
+		int p = t - max(bef[pos], 1) + 1;
+		if (t == p) return;
+		int checkPos = p * nEdge + edgeId;
+		int realAft = max(aft[pos], 1);
+		if (realAft == aft[checkPos] - t + p) return;
+		aft[pos] = aft[checkPos] - t + p;
+	}
 private:
 	
 	/*edgeFilter for FRTMExact*/
@@ -125,11 +133,11 @@ protected:
 
 
 	#pragma region DEL Table  
+		int *lab; // lab_t:temporal graph label   lab[t+edgeId*T]  O(ET)
 		int *bef;// len_t:the times of edges keeping their label fixed  bef[t+edgeId*T]  O(ET)
-		int *eW; // lab_t:temporal graph label   eW[t+edgeId*T]  O(ET)
 		int *aft;// aft_t: the times of edges keeping their label fixed in the time after t   aft[t+edgeId*T] O(ET)
 		int *tail;//the last interval with different labels  aft[t+edgeId*T]  O(EL) 
-		int* dif;//dif[e][t1]-dif[e][t2] = noise label number of eW[t1][e] in [t1,t2] if eW[t1][e]=eW[t2][e]
+		int* dif;//dif[e][t1]-dif[e][t2] = noise label number of lab[t1][e] in [t1,t2] if lab[t1][e]=lab[t2][e]
 #pragma endregion  
 };
 
