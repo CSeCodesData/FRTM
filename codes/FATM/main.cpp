@@ -63,7 +63,7 @@ void runIncrementalAlgorithm(TGraph*& temporal_graph, const char * src
 void testEndpointD5(TGraph*& temporalgraph, vec(TMotifII*)& lis);
 #pragma endregion
 #pragma region output
-void outputResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, int resultLen);
+//void outputResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, int resultLen);
 void outputResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int resultLen);
 void compareResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, vec(TMotifII*)*& result2, int resultLen, long long motifNum1, long long motifNum2);
 void compareResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, vec(TMotifII*)*& result2, int resultLen, long long motifNum1, long long motifNum2);
@@ -409,10 +409,11 @@ void runStaticAlgorithm(TGraph*& temporal_graph, bool*& fixLabel) {
 	cout << "gne11: " << Test::gne11 << " gne121: " << Test::gne121 << " gne122: " << Test::gne122
 		<< " gne211: " << Test::gne211 << " gne2121: " << Test::gne2121 << " gne2122: " << Test::gne2122
 		<< " gne221: " << Test::gne221 << " gne222: " << Test::gne222 << " gnenonoise: " << Test::gnenonoise
-		<<  " gnefield: " << Test::gnefield*1.0/(Test::gne11 + Test::gne121 + Test::gne122+ Test::gne211+
-			Test::gne2121+Test::gne2122+ Test::gne221+ Test::gne222 + Test::gnenonoise)
+		<<  " gnefield: " << Test::gnefield*1.0/(Test::gne11 + Test::gne121 + Test::gne122 + Test::gne211+ Test::gne2121 +
+			Test::gne2122+ Test::gne221 + Test::gne222 + Test::gnenonoise)
 		<<  " gnemaxfield: " << Test::gnemaxfield << endl;
-	
+	//cout << Test::counter*1.0 /1000 << endl;
+	//cout << Test::counter6 << " "<< Test::counter3 << " " << Test::counter7 << " " << Test::counter5 << endl;
 	#ifdef _USENSTIMER
 		cout << "time: " << allTime << "ns" << endl;
 	#else
@@ -601,66 +602,66 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 
 
 #pragma region output
-void outputResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, int resultLen) {
-	veciter(TMotifI*) iter;
-	TMotifI* motif;
-	size_t size;
-	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
-	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
-	for (int i = 0; i < resultLen; i++) {
-		size = result[i].size();
-		if (size == 0) continue;
-		iter = result[i].begin();
-		motif = (TMotifI*) *iter;
-		//if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
-		/*cout << "startT: " << motif->getStartT()
-			<< "\tendT: " << motif->getEndT() << endl;
-		cout << MOTIF_NUM << size << endl;
-		*/
-		//if (motif->getStartT() == 0 && motif->getEndT() == 119 )FindTMotif::output = 2;
-		if (FindTMotif::output >= 1) {
-			cout << MOTIF_NUM << size << endl;
-			cout << "startT: " << motif->getStartT()
-				<< "\tendT: " << motif->getEndT() << endl;
-		}
-		FindTMotif::print(temporal_graph,
-			result, i, false);
-		//if (motif->getStartT() == 0 && motif->getEndT() == 119) { FindTMotif::output = 0; exit(0); }
-	}
-
-	cout << "motif max edges num: " << FindTMotif::motifMaxNum <<
-		"\tmotif avg edges num: " << FindTMotif::motifSum * 1.0 / FindTMotif::motifNumber << endl;
-	cout << "motif max intverval length: " << Test::maxIntvLen <<
-		"\tmotif avg intverval length: " << Test::sumIntvLen * 1.0 / FindTMotif::motifNumber << endl;
-	cout << "sum: " << FindTMotif::motifNumber << endl;
-
-	//cout << "counter: " << Test::counter << endl;
-	/*if (FindTMotif::output == 3) {
-		cout << "-------------------------------------------------------" << endl;
-		for (int i = 0; i < resultLen; i++) {
-			size = result[i].size();
-			if (size == 0) continue;
-			iter = result[i].begin();
-			motif = *iter;
-			if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
-			cout << MOTIF_NUM << size << endl;
-			cout << "startT: " << motif->getStartT()
-				<< "\tendT: " << motif->getEndT() << endl;
-			FindTMotif::printRealLabel(temporal_graph, result[i]);
-		}
-	}*/
-
-	cout << "after algorithm: "; Test::showPeakMemoryUse();
-	Test::showRealPeakMemoryUse();
-
-	/*if (Test::testingMode) {
-		if (Test::globalApproType && Test::globalApproType != 1)
-			testOverlap(temporal_graph, res);
-		if(Test::globalApproType && (Test::globalApproType == 1 || Test::globalApproType == 3))
-			testLabel(temporal_graph, res);
-		showTesting();
-	}*/
-}
+//void outputResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, int resultLen) {
+//	veciter(TMotifI*) iter;
+//	TMotifI* motif;
+//	size_t size;
+//	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
+//	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
+//	for (int i = 0; i < resultLen; i++) {
+//		size = result[i].size();
+//		if (size == 0) continue;
+//		iter = result[i].begin();
+//		motif = (TMotifI*) *iter;
+//		//if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
+//		/*cout << "startT: " << motif->getStartT()
+//			<< "\tendT: " << motif->getEndT() << endl;
+//		cout << MOTIF_NUM << size << endl;
+//		*/
+//		//if (motif->getStartT() == 0 && motif->getEndT() == 119 )FindTMotif::output = 2;
+//		if (FindTMotif::output >= 1) {
+//			cout << MOTIF_NUM << size << endl;
+//			cout << "startT: " << motif->getStartT()
+//				<< "\tendT: " << motif->getEndT() << endl;
+//		}
+//		FindTMotif::print(temporal_graph,
+//			result, i, false);
+//		//if (motif->getStartT() == 0 && motif->getEndT() == 119) { FindTMotif::output = 0; exit(0); }
+//	}
+//
+//	cout << "motif max edges num: " << FindTMotif::motifMaxNum <<
+//		"\tmotif avg edges num: " << FindTMotif::motifSum * 1.0 / FindTMotif::motifNumber << endl;
+//	cout << "motif max intverval length: " << Test::maxIntvLen <<
+//		"\tmotif avg intverval length: " << Test::sumIntvLen * 1.0 / FindTMotif::motifNumber << endl;
+//	cout << "sum: " << FindTMotif::motifNumber << endl;
+//
+//	//cout << "counter: " << Test::counter << endl;
+//	/*if (FindTMotif::output == 3) {
+//		cout << "-------------------------------------------------------" << endl;
+//		for (int i = 0; i < resultLen; i++) {
+//			size = result[i].size();
+//			if (size == 0) continue;
+//			iter = result[i].begin();
+//			motif = *iter;
+//			if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
+//			cout << MOTIF_NUM << size << endl;
+//			cout << "startT: " << motif->getStartT()
+//				<< "\tendT: " << motif->getEndT() << endl;
+//			FindTMotif::printRealLabel(temporal_graph, result[i]);
+//		}
+//	}*/
+//
+//	cout << "after algorithm: "; Test::showPeakMemoryUse();
+//	Test::showRealPeakMemoryUse();
+//
+//	/*if (Test::testingMode) {
+//		if (Test::globalApproType && Test::globalApproType != 1)
+//			testOverlap(temporal_graph, res);
+//		if(Test::globalApproType && (Test::globalApproType == 1 || Test::globalApproType == 3))
+//			testLabel(temporal_graph, res);
+//		showTesting();
+//	}*/
+//}
 void outputResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int resultLen) {
 	veciter(TMotifII*) iter;
 	TMotifII* motif;
@@ -700,7 +701,7 @@ void outputResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int resultLe
 		cout << "Complete testing" << endl;
 	}*/
 	cout << "motif max edges num: " << FindTMotif::motifMaxNum <<
-		"\tmotif avg edges num: " << FindTMotif::motifSum * 1.0 / FindTMotif::motifNumber << endl;
+		"\tmotif all edges num: " << FindTMotif::motifSum << endl;
 	cout << "motif max intverval length: " << Test::maxIntvLen <<
 		"\tmotif avg intverval length: " << Test::sumIntvLen * 1.0 / FindTMotif::motifNumber << endl;
 	cout << "sum: " << FindTMotif::motifNumber << endl;

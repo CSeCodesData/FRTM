@@ -41,7 +41,8 @@ void FindRTMotif::FRTM(TGraph*& graph,
 	int rightEndpoint;//max position of R set
 	bool* expandMask = DBG_NEW bool[currNTimestamp];//mark certain intervals where RTM can appear (for expandable checking)
 #pragma endregion
-	vector<pair<int, int>> tempRecordFromQueue;
+	vector<pair<int, int>> tempRecordFromQueue; 
+	//i2tupHMap expCheck;
 	TGraph::posUsedForEdgeFilter = 0;
 	for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge) {//O(T)
 		BEGIN_TIMER(b)
@@ -99,7 +100,7 @@ void FindRTMotif::FRTM(TGraph*& graph,
 			BEGIN_TIMER(d)
 				graph->expCheckFRTM(maxCC, setCC,
 					resultTF, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableFRTM);
+					edgeEndT, expandMask,/* expCheck, */motifNumber, &TGraph::checkExpandableFRTM);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 		}
@@ -164,7 +165,8 @@ void FindRTMotif::FRTMDYN(TGraph*& graph,
 
 	bool* expandMask = DBG_NEW bool[currNTimestamp];//mark certain intervals where RTM can appear (for expandable checking)
 #pragma endregion
-	vector<pair<int, int>> tempRecordFromQueue;
+	vector<pair<int, int>> tempRecordFromQueue; 
+	//i2tupHMap expCheck;
 	//BEGIN_TIMER(h)
 	TGraph::posUsedForEdgeFilter = choiceStartT * nEdge;
 	for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge) {//O(T)
@@ -223,7 +225,7 @@ void FindRTMotif::FRTMDYN(TGraph*& graph,
 			BEGIN_TIMER(d)
 				graph->expCheckFRTM(maxCC, setCC,
 					resultTF, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableFRTMMidR);
+					edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableFRTMMidR);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 		}
@@ -341,7 +343,8 @@ void FindRTMotif::FRTMOpt1(TGraph*& graph,
 	i2iHMap haveNewEdgeCC;//have edge in R+
 	int* remainEdges = DBG_NEW int[nEdge];//record remained edges after removing edges to be removed
 #pragma endregion
-	vector<pair<int, int>> tempRecordFromQueue;
+	vector<pair<int, int>> tempRecordFromQueue; 
+	//i2tupHMap expCheck;
 	TGraph::posUsedForEdgeFilter = 0;
 	for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge) {//O(T)
 		BEGIN_TIMER(b)
@@ -402,7 +405,7 @@ void FindRTMotif::FRTMOpt1(TGraph*& graph,
 			BEGIN_TIMER(d)
 				graph->expCheckFRTM(maxCC, setCC,
 					resultTF, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1);
+					edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 		}
@@ -474,6 +477,7 @@ void FindRTMotif::FRTMOpt1DYN(TGraph*& graph,
 	int* remainEdges = DBG_NEW int[nEdge];//record remained edges after removing edges to be removed
 #pragma endregion
 	vector<pair<int, int>> tempRecordFromQueue;
+	//i2tupHMap expCheck;
 	TGraph::posUsedForEdgeFilter = choiceStartT * nEdge;
 	for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge) {//O(T)
 		BEGIN_TIMER(b)
@@ -537,7 +541,7 @@ void FindRTMotif::FRTMOpt1DYN(TGraph*& graph,
 			BEGIN_TIMER(d)
 				graph->expCheckFRTM(maxCC, setCC,
 					resultTF, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1MidR);
+					edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1MidR);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 		}
@@ -612,6 +616,10 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 	vec(TMotifII*)*& resultTF,
 	bool*& fixLabel) {
 	//for short intervals
+	if (Setting::delta == 0 || Setting::c == 0) {
+		FRTMOpt1(graph, resultTF, fixLabel);
+		return;
+	}
 	int newk = (int)(ceil(1 / Setting::delta) + 0.5);
 	int maxLengthForShortIntv = newk - k;
 	if (maxLengthForShortIntv >= 1) {
@@ -674,8 +682,10 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 		int* addE = DBG_NEW int[nEdge];//edges to add in set setCCShortIntv
 		int addENum;//the number of edges in addE
 		bool* saveR = DBG_NEW bool[nNode];//record ccs computed in large intervals to be saved
+		//i2tupHMap expCheck;
 		TGraph::posUsedForEdgeFilter = choiceStartT * nEdge;
 		TGraph::posUsedForEdgeFilterShortIntv = (choiceStartT + k - 1)*nEdge;
+		//Test::counter9 = -1;
 		for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge, TGraph::posUsedForEdgeFilterShortIntv += nEdge) {//O(T)
 			BEGIN_TIMER(b)
 			selectedNum = 0;
@@ -691,6 +701,7 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 			if (Ts <= lastTimeShortIntv) {//have large intervals and short intervals for [m,m+k-1]...[m,T]
 				if (Ts != choiceStartT) {
 					root2Comp.clear();
+					//expCheck.clear();
 					disjointSet->reset(vertexNum);
 					hasChecked.clear();
 					checkedCC->release();
@@ -710,9 +721,11 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 				disjointSetShortIntv->reset(vertexNum);
 				root2CompShortIntv.clear();
 			}
-
+			//if (Ts <= 3000) {
+			//	cout << Test::compr <<" "<< Test::gne << "#"<< endl;
+			//}
+			//if (Ts == 2001) return;
 			edgeEndT = choiceEndT;
-
 			//Test S(m,T)
 			if (Ts <= lastTimeShortIntv) {
 				smt = edgeSetsR[choiceEndT - Te].size();
@@ -733,7 +746,9 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 						edgesAdd.emplace(add);
 					}
 					edgeSetsRAdd[tempT].clear();
-
+					/*if (Ts < 21001) {
+						edgeSetsR[tempT].clear(); continue;
+					}*/
 					iterStart = edgeSetsR[tempT].begin();
 					iterEnd = edgeSetsR[tempT].end();
 					BEGIN_TIMER(c)
@@ -755,12 +770,15 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 
 					BEGIN_TIMER(d)
 						graph->expCheckFRTM(maxCC, setCC,
-							resultTF, k, Ts,
-							edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1);
+							resultTF, k, Ts, 
+							edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1);
 					Test::gne += END_TIMER(d);
 					edgeSetsR[tempT].clear();
 				}
 				else {//short intervals
+					/*if (Ts < 21001) {
+						edgeSetsRShortIntv[tempTAll].clear(); continue;
+					}*/
 					if (Ts <= lastTimeShortIntv && tempTAll == maxLengthForShortIntv - 1) {//record root of disjointSet to be saved
 						graph->recordSavedRoot(setCC, hasChecked, newE, newENum, saveR, disjointSet, vertex2Pos);
 					}
@@ -783,7 +801,7 @@ void FindRTMotif::FRTMPlus(TGraph*& graph,
 
 					BEGIN_TIMER(d)
 						graph->expCheckFRTMPlus(maxCCShortIntv, setCCShortIntv,
-							resultTF, k, Ts, edgeEndT, expandMask, motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
+							resultTF, k, Ts, edgeEndT, expandMask, /*expCheck,*/ motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
 					Test::gne += END_TIMER(d);
 					edgeSetsRShortIntv[tempTAll].clear();
 				}
@@ -835,6 +853,10 @@ void FindRTMotif::FRTMPlusDYN(TGraph*& graph,
 	vec(TMotifII*)*& resultTF,
 	bool*& fixLabel, int choiceStartT, int choiceEndT) {
 	//for short intervals
+	if (Setting::delta == 0 || Setting::c == 0) {
+		FRTMOpt1DYN(graph, resultTF, fixLabel, choiceStartT, choiceEndT);
+		return;
+	}
 	int newk = (int)(ceil(1 / Setting::delta) + 0.5);
 	int maxLengthForShortIntv = newk - k;
 	if (maxLengthForShortIntv >= 1) {
@@ -895,7 +917,8 @@ void FindRTMotif::FRTMPlusDYN(TGraph*& graph,
 		int* addE = DBG_NEW int[nEdge];//edges to add in set setCCShortIntv
 		int addENum;//the number of edges in addE
 		bool* saveR = DBG_NEW bool[nNode];//record ccs computed in large intervals to be saved
-		
+		//i2tupHMap expCheck;
+
 		TGraph::posUsedForEdgeFilter = choiceStartT * nEdge;
 		TGraph::posUsedForEdgeFilterShortIntv = (choiceStartT + k - 1)*nEdge;
 		for (int Ts = choiceStartT; Ts <= lastTime; Ts++, TGraph::posUsedForEdgeFilter += nEdge, TGraph::posUsedForEdgeFilterShortIntv += nEdge) {//O(T)
@@ -980,7 +1003,7 @@ void FindRTMotif::FRTMPlusDYN(TGraph*& graph,
 					BEGIN_TIMER(d)
 						graph->expCheckFRTM(maxCC, setCC,
 							resultTF, k, Ts,
-							edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1MidR);
+							edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1MidR);
 					Test::gne += END_TIMER(d);
 					edgeSetsR[tempT].clear();
 
@@ -1008,7 +1031,7 @@ void FindRTMotif::FRTMPlusDYN(TGraph*& graph,
 
 					BEGIN_TIMER(d)
 						graph->expCheckFRTMPlusMidR(maxCCShortIntv, setCCShortIntv,
-							resultTF, k, Ts, edgeEndT, expandMask, motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
+							resultTF, k, Ts, edgeEndT, expandMask, /*expCheck,*/ motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
 					Test::gne += END_TIMER(d);
 					edgeSetsRShortIntv[tempTAll].clear();
 				}

@@ -178,17 +178,23 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 
 	//test the number of maximal intervals for each edge, where the edge has the same labels
 	long long intvNum = 0, maxIntvNum = 0, eachIntvNum;
+	//int avg = 0;
+	//double all = 0;
 	for (int id = 0; id < nEdge; id++, posForELabel += numOfLabel) {//O(E)
 		int t = 0;
 		eachIntvNum = 0;
+		//avg = 0;
 		while (t < currNTimestamp) {
+			//avg += max(aft[t*nEdge + id], 1);
 			t = t + max(aft[t*nEdge + id],1);
 			eachIntvNum++;
 		}
+		//all += avg * 1.0 / eachIntvNum;
 		intvNum += eachIntvNum;
 		maxIntvNum = max(maxIntvNum, eachIntvNum);
 	}
 	cout << "maximum interval number: " << maxIntvNum << ", average interval number: " << intvNum * 1.0 / nEdge << endl;
+	//cout<< all / nEdge << endl;
 }
 
 void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {

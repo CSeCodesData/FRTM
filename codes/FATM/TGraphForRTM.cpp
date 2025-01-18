@@ -471,12 +471,14 @@ void TGraph::updateNewEdgeInfoFRTM(
 }
 
 void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
-	int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber) {
+	int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber) {
 	CComponentsFRTM*tempCC = (CComponentsFRTM*)temp;
 	TMotifII* motif;
 	//newly generated connected components
 	bool isRightExpandable;
 	pair<int, int> intersectIntv;
+	//int edgeBefP = motifEndT * nEdge;
+
 	if (tempCC->subCCNum == 0) {//not edges removed  (must be non right expandable)
 		if (motifStartT - startT != 0) {
 			intersectIntv.first = tempCC->maxEMaxIntvlStartTQueue.top().first;
@@ -495,7 +497,17 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 				int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first + 1);
 				Test::gnefield += tempField * tempCC->edges.size();
 				Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
-
+				
+				/*if (allNTimestamp > nEdge) {
+					int maxP = 0x7fffffff, minP = -1;
+					for (auto e : tempCC->edges) {
+						int edgeP = edgeBefP + e;
+						maxP = min(maxP, edgeBef[edgeP].first);
+						minP = max(minP, edgeBef[edgeP].second);
+						if (minP > maxP) break;
+					}
+					if (minP <= maxP && minP != -1) return;
+				}*/
 				bool isSave = true;
 
 				if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
@@ -510,8 +522,8 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 					}
 				}
 				else {
-					int j = motifStartT - 1;
-					for (; j >= intersectIntv.first; --j) {
+					int j = intersectIntv.first;
+					for (; j <= motifStartT - 1; ++j) {
 						CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 						if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 							isSave = false;
@@ -538,6 +550,19 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 			motifNumber++;
 		}
 		//Test::counter +=END_NSTIMER;
+
+		/*if (allNTimestamp > nEdge) {
+			for (auto e : tempCC->edges) {
+				int edgeP = edgeBefP + e;
+				if (edgeBef[edgeP].second + 1 == motifStartT) {
+					if (motifStartT == 0) {
+						edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+					}
+					else edgeBef[edgeP].second = motifStartT;
+				}
+				else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+			}
+		}*/
 	}
 	else {
 		int subCCNum = tempCC->subCCNum;
@@ -570,6 +595,18 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 						int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first + 1);
 						Test::gnefield += tempField * tempCC->subCCs[i].size();
 						Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
+						//if (allNTimestamp > nEdge) {
+						//	int maxP = 0x7fffffff, minP = -1;
+						//	for (auto p : tempCC->subCCs[i]) {
+						//		auto e = tempCC->edges[p];
+						//		int edgeP = edgeBefP + e;
+						//		maxP = min(maxP, edgeBef[edgeP].first);
+						//		minP = max(minP, edgeBef[edgeP].second);
+						//		if (minP > maxP) break;
+						//	}
+						//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+						//	if (minP <= maxP && minP != -1) return;
+						//}
 
 						bool isSave = true;
 						if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
@@ -583,8 +620,8 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 							}
 						}
 						else {
-							int j = motifStartT - 1;
-							for (; j >= intersectIntv.first; --j) {
+							int j = intersectIntv.first; 
+							for (; j <= motifStartT - 1; ++j) {
 								CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
@@ -654,6 +691,18 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 					int tempField = (intersectIntv.second - motifEndT) * (motifStartT - intersectIntv.first);
 					Test::gnefield += tempField * tempCC->subCCs[i].size();
 					Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
+					//if (allNTimestamp > nEdge) {
+					//	int maxP = 0x7fffffff, minP = -1;
+					//	for (auto p : tempCC->subCCs[i]) {
+					//		auto e = tempCC->edges[p];
+					//		int edgeP = edgeBefP + e;
+					//		maxP = min(maxP, edgeBef[edgeP].first);
+					//		minP = max(minP, edgeBef[edgeP].second);
+					//		if (minP > maxP) break;
+					//	}
+					//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+					//	if (minP <= maxP && minP != -1) return;
+					//}
 
 					bool isSave = true;
 					if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
@@ -668,8 +717,8 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 						}
 					}
 					else {
-						int j = motifStartT;
-						for (; j >= intersectIntv.first; --j) {
+						int j = intersectIntv.first;
+						for (; j <= motifStartT; ++j) {
 							CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
 							if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 								isSave = false;
@@ -701,12 +750,26 @@ void TGraph::checkExpandableFRTM(int savePos, CComponentsII* temp,
 					//Test::counter2 += END_NSTIMER;
 				}
 			}
+
+		/*	if (allNTimestamp > nEdge) {
+				for (auto p : tempCC->subCCs[i]) {
+					auto e = tempCC->edges[p];
+					int edgeP = edgeBefP + e;
+					if (edgeBef[edgeP].second + 1 == motifStartT) {
+						if (motifStartT == 0) {
+							edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+						}
+						else edgeBef[edgeP].second = motifStartT;
+					}
+					else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+				}
+			}*/
 		}
 	}
 }
 
 void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
-	int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber) {
+	int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/  vec(TMotifII*)*& result, long long& motifNumber) {
 	CComponentsFRTM*tempCC = (CComponentsFRTM*)temp;
 	TMotifII* motif;
 	//newly generated connected components
@@ -715,6 +778,7 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 	bool needCheck;
 	int edgeId;
 	auto edgeEnd = tempCC->edges.end();
+	//int edgeBefP = motifEndT * nEdge;
 	if (tempCC->subCCNum == 0) {//not edges removed  (must be non right expandable)
 		if (motifStartT - startT != 0) {
 			//getIntersectionOfScope(temp->edges, intersectIntv);
@@ -739,6 +803,16 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 			else {//left expandable or both expandable
 				bool isSave = true;
 
+				/*if (allNTimestamp > nEdge) {
+					int maxP = 0x7fffffff, minP = -1;
+					for (auto e : tempCC->edges) {
+						int edgeP = edgeBefP + e;
+						maxP = min(maxP, edgeBef[edgeP].first);
+						minP = max(minP, edgeBef[edgeP].second);
+						if (minP > maxP) break;
+					}
+					if (minP <= maxP && minP != -1) return;
+				}*/
 				if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
 					//cout << Test::counter << " ! " << Test::counter2 << " " << Test::counter3 << " " << intersectIntv.first << " " << intersectIntv.second << endl;
 					int j = intersectIntv.second;
@@ -751,8 +825,8 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 					}
 				}
 				else {
-					int j = motifStartT - 1;
-					for (; j >= intersectIntv.first; --j) {
+					int j = intersectIntv.first;
+					for (; j <= motifStartT - 1; ++j) {
 						CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 						if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 							isSave = false;
@@ -794,6 +868,19 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 			motifNumber++;
 		}
 		//Test::counter +=END_NSTIMER;
+
+		/*if (allNTimestamp > nEdge) {
+			for (auto e : tempCC->edges) {
+				int edgeP = edgeBefP + e;
+				if (edgeBef[edgeP].second + 1 == motifStartT) {
+					if (motifStartT == 0) {
+						edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+					}
+					else edgeBef[edgeP].second = motifStartT;
+				}
+				else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+			}
+		}*/
 	}
 	else {
 		int subCCNum = tempCC->subCCNum;
@@ -826,6 +913,18 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 						motifNumber++;
 					}
 					else {//left expandable or both expandable
+						//if (allNTimestamp > nEdge) {
+						//	int maxP = 0x7fffffff, minP = -1;
+						//	for (auto p : tempCC->subCCs[i]) {
+						//		auto e = tempCC->edges[p];
+						//		int edgeP = edgeBefP + e;
+						//		maxP = min(maxP, edgeBef[edgeP].first);
+						//		minP = max(minP, edgeBef[edgeP].second);
+						//		if (minP > maxP) break;
+						//	}
+						//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+						//	if (minP <= maxP && minP != -1) return;
+						//}
 						bool isSave = true;
 						if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
 							int j = intersectIntv.second;
@@ -838,8 +937,8 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 							}
 						}
 						else {
-							int j = motifStartT - 1;
-							for (; j >= intersectIntv.first; --j) {
+							int j = intersectIntv.first;
+							for (; j <= motifStartT - 1; ++j) {
 								CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
@@ -912,7 +1011,18 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 					//Test::counter += END_NSTIMER;
 				}
 				else {//left expandable, right expandable or both expandable
-
+					//if (allNTimestamp > nEdge) {
+					//	int maxP = 0x7fffffff, minP = -1;
+					//	for (auto p : tempCC->subCCs[i]) {
+					//		auto e = tempCC->edges[p];
+					//		int edgeP = edgeBefP + e;
+					//		maxP = min(maxP, edgeBef[edgeP].first);
+					//		minP = max(minP, edgeBef[edgeP].second);
+					//		if (minP > maxP) break;
+					//	}
+					//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+					//	if (minP <= maxP && minP != -1) return;
+					//}
 					bool isSave = true;
 					if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
 						int j = intersectIntv.second;
@@ -926,8 +1036,8 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 						}
 					}
 					else {
-						int j = motifStartT;
-						for (; j >= intersectIntv.first; --j) {
+						int j = intersectIntv.first;
+						for (; j <= motifStartT; ++j) {
 							CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
 							if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 								isSave = false;
@@ -965,6 +1075,19 @@ void TGraph::checkExpandableFRTMMidR(int savePos, CComponentsII* temp,
 				}
 			}
 
+			/*if (allNTimestamp > nEdge) {
+				for (auto p : tempCC->subCCs[i]) {
+					auto e = tempCC->edges[p];
+					int edgeP = edgeBefP + e;
+					if (edgeBef[edgeP].second + 1 == motifStartT) {
+						if (motifStartT == 0) {
+							edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+						}
+						else edgeBef[edgeP].second = motifStartT;
+					}
+					else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+				}
+			}*/
 		}
 	}
 }
@@ -1376,7 +1499,7 @@ void TGraph::updateNewEdgeInfoOpt1(
 	veciter(int)& infoBegin, veciter(int)& infoEnd, unordered_set<int>& edgesAdd,
 	vec(CComponentsII*)& setCC,
 	i2iHMap& vertex2Pos, DynamicConnectivity*& connectivity, DisjointSet* tempDisjointSet,
-	i2iHMap& root2Comp, i2iHMap* subCCMap, int*& subCCId, i2iHMap& root2Id, LinkedList<int>*& checkedCC, unordered_map<int, LinkedNode<int>*>& hasChecked, vector<pair<int, int>>&tempRecordFromQueue,  vec(int)& saveCCPos, int startTime, int endTime, int k, i2iHMap& haveNewEdgeCC, int*& remainEdges, MaintainCCOPT1 mainStrategy) {
+	i2iHMap& root2Comp, i2iHMap* subCCMap, int*& subCCId, i2iHMap& root2Id, LinkedList<int>*& checkedCC, unordered_map<int, LinkedNode<int>*>& hasChecked, vector<pair<int, int>>&tempRecordFromQueue, vec(int) & saveCCPos, int startTime, int endTime, int k, i2iHMap& haveNewEdgeCC, int*& remainEdges, MaintainCCOPT1 mainStrategy) {
 	if (checkedCC->first == nullptr && infoBegin == infoEnd) return;
 
 	//BEGIN_TIMER(a)
@@ -1389,6 +1512,7 @@ void TGraph::updateNewEdgeInfoOpt1(
 		infoIter != infoEnd; ++infoIter) {//new edges in R edge sets
 
 		id = *infoIter;//edge's id
+		//cout << startTime<<" "<< endTime << " " << id << endl;
 		/*the root of the edge's vertex in the disjoint set*/
 		root = connectivity->findRoot(vertex2Pos[edgeList[id].first]);
 		updateCCOpt1(setCC, root2Comp, edgesAdd, addEnd, /*lastEdgeSetR,*/ checkedCC, hasChecked, /*realMotifNum,*/ infoIter,
@@ -1419,6 +1543,7 @@ void TGraph::updateNewEdgeInfoOpt1(
 		generatedCC = (CComponentsFRTMOPT1*)setCC[ccPos];
 		tempEdges = &generatedCC->edges;
 		//cout << startTime << " " << endTime << " " << ccPos << endl;
+
 		size = (int)tempEdges->size();
 		if (generatedCC->newInsert == size) {//not updated edges
 			if (generatedCC->tabuTChangePos != -1 && generatedCC->tabuTChangePos < endTime) {
@@ -1451,6 +1576,9 @@ void TGraph::updateNewEdgeInfoOpt1(
 					if (generatedCC->tabuTChangePos < ccLastNoisePair.second.startTime - 1) {
 						generatedCC->tabuTChangePos = ccLastNoisePair.second.startTime - 1;
 					}
+					/*if (ccPos == 13 && startTime == 42) {
+						cout << endTime << " " << ccLastNoisePair.second.startTime << endl;
+					}*/
 					generatedCC->noisePosQueue.pop();
 				}
 				else {
@@ -1466,6 +1594,11 @@ void TGraph::updateNewEdgeInfoOpt1(
 						}
 					}
 				}
+
+				/*if (ccPos == 13 && startTime == 2) {
+					cout << generatedCC->edges[ccLastNoisePair.second.pos] << "&"<< endl;
+				}*/
+
 			}
 			queueSize = (int)generatedCC->noisePosQueue.size();
 		}
@@ -1473,6 +1606,7 @@ void TGraph::updateNewEdgeInfoOpt1(
 		if (generatedCC->tabuTChangePos != -1) {
 			if (generatedCC->noisePosQueue.size() != 0) {
 				auto ccLastNoisePair = generatedCC->noisePosQueue.top();
+				
 				//cout << ccLastNoisePair.first << " " << ccLastNoisePair.second.pos << " " << endTime << endl;
 				generatedCC->tabuTChangePos = max(ccLastNoisePair.first, generatedCC->tabuTChangePos);
 			}
@@ -1517,7 +1651,7 @@ void TGraph::updateNewEdgeInfoOpt1(
 				generatedCC->preEMaxIntvlChangePos.pop();
 			}
 		}
-
+		
 		//Test::counter2 += END_TIMER(b);
 		//BEGIN_TIMER(c)
 		if (removeEdge > 0) {
@@ -1561,12 +1695,18 @@ void TGraph::updateNewEdgeInfoOpt1(
 
 #pragma region expandCheck
 void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
-	int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber) {
+	int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber) {
 	CComponentsFRTMOPT1*tempCC = (CComponentsFRTMOPT1*)temp;
 	TMotifII* motif;
 	//newly generated connected components
 	bool isRightExpandable;
+	//if (Test::counter2 == 1) Test::counter3++;
+	//else Test::counter = 2;
+	//int edgeBefP = motifEndT * nEdge;
 	pair<int, int> intersectIntv;
+	//if (motifStartT == 41 && motifEndT == 172)exit(0);
+
+	
 	if (tempCC->subCCNum == 0) {//not edges removed  (must be non right expandable)
 		if (motifStartT - startT != 0) {
 			intersectIntv.first = tempCC->maxEMaxIntvlStartTQueue.top().first;
@@ -1575,18 +1715,32 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 			if (intersectIntv.first == motifStartT) {//non left expandable => non both expandable
 				Test::gne121+= tempCC->edges.size();
 				Test::gnefield++;
+				//Test::gne121++;
 
 				motif = DBG_NEW TMotifII(motifStartT, motifEndT);
 				motif->copyEdges(tempCC->edges);
 				result[savePos].emplace_back(motif);
 				motifNumber++;
+
 			}
 			else {//left expandable or both expandable
-				Test::gne122+= tempCC->edges.size();
-				int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first + 1);
+
+				/*if (allNTimestamp > nEdge) {
+					int maxP = 0x7fffffff, minP = -1;
+					for (auto e : tempCC->edges) {
+						int edgeP = edgeBefP + e;
+						maxP = min(maxP, edgeBef[edgeP].first);
+						minP = max(minP, edgeBef[edgeP].second);
+						if (minP > maxP) break;
+					}
+					if (minP <= maxP && minP != -1 ) return;
+				}*/
+				Test::gne122 += tempCC->edges.size();
+				//Test::gne122++;
+				int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first);
 				Test::gnefield += tempField * tempCC->edges.size();
-				Test::gnemaxfield = max(Test::gnemaxfield,tempField);/**/
-				//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
+				//Test::gnefield += tempField;
+				Test::gnemaxfield = max(Test::gnemaxfield,tempField);
 				
 				bool isSave = true;
 
@@ -1602,8 +1756,8 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 					}
 				}
 				else {
-					int j = motifStartT - 1;
-					for (; j >= intersectIntv.first; --j) {
+					int j = intersectIntv.first;
+					for (; j <= motifStartT - 1; ++j) {
 						CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 						if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 							isSave = false;
@@ -1611,7 +1765,8 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 						}
 					}
 				}
-				if (isSave) { 
+				//cout << "$" << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << " "<< isSave<< endl;
+				if (isSave) {
 					//Test::counter++;
 					//assert(intersectIntv.first != startT);
 					motif = DBG_NEW TMotifII(motifStartT, motifEndT);
@@ -1619,91 +1774,55 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 
 					result[savePos].emplace_back(motif);
 					motifNumber++;
+
 				}
-				//else Test::counter2++;
 			}
 		}
 		else {
 			Test::gne11+= tempCC->edges.size();
+			//Test::gne11++;
 			Test::gnefield++;
 
 			motif = DBG_NEW TMotifII(motifStartT, motifEndT);
 			motif->copyEdges(tempCC->edges);
 			result[savePos].emplace_back(motif);
 			motifNumber++;
+
 		}
+
+		/*if (allNTimestamp > nEdge) {
+			for (auto e : tempCC->edges) {
+				int edgeP = edgeBefP + e;
+				if (edgeBef[edgeP].second + 1 == motifStartT) {
+					if (motifStartT == 0) {
+						edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+					}
+					else edgeBef[edgeP].second = motifStartT;
+				}
+				else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+			}
+		}*/
 		//Test::counter +=END_NSTIMER;
 	}
 	else {
+	
 		int subCCNum = tempCC->subCCNum;
-
+		
 		//check each subCC
 		veciter(int) subCCEnd;
 		for (int i = 0; i < subCCNum; ++i) {
 			//if (tempCC->subCCHaveNewEdges[i]) {//might expandable
-				isRightExpandable = !tempCC->subCCsaved[i];//check whether exists e（R+[m,i]
-				subCCEnd = tempCC->subCCs[i].end();
-				
-				if (!isRightExpandable) {//exists e（R+[m,i] (must be non right expandable)
-					//BEGIN_NSTIMER; 
-					if (motifStartT != 0) {
+			isRightExpandable = !tempCC->subCCsaved[i];//check whether exists e（R+[m,i]
+			subCCEnd = tempCC->subCCs[i].end();
+			if (!isRightExpandable) {//exists e（R+[m,i] (must be non right expandable)
+				//BEGIN_NSTIMER; 
+				if (motifStartT != 0) {
 
-						getIntersectionOfScope(tempCC->subCCs[i], tempCC->edges, intersectIntv);
-						
-						if (intersectIntv.first == motifStartT) {//non left expandable => non both expandable
-							Test::gne2121+= tempCC->subCCs[i].size();
-							Test::gnefield++;
+					getIntersectionOfScope(tempCC->subCCs[i], tempCC->edges, intersectIntv);
 
-							motif = DBG_NEW TMotifII(motifStartT, motifEndT);
-							subCCEnd = tempCC->subCCs[i].end();
-							for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
-								motif->addEdge(tempCC->edges[*edgeIter]);
-							}
-							result[savePos].emplace_back(motif);
-							motifNumber++;
-						}
-						else {//left expandable or both expandable
-							Test::gne2122+= tempCC->subCCs[i].size();
-							int tempField = (intersectIntv.second - motifEndT+1) * (motifStartT - intersectIntv.first + 1);
-							Test::gnefield += tempField * tempCC->subCCs[i].size();
-							Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
-							//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
-							
-							bool isSave = true;
-							if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
-								int j = intersectIntv.second;
-								for (; j >= motifEndT; --j) {
-									CLEARALL(expandMask, true, motifStartT - intersectIntv.first, bool);
-									if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - 1 - startT, j - startT, motifStartT - startT, expandMask)) {//O(tEs)
-										isSave = false;
-										break;
-									}
-								}
-							}
-							else {
-								int j = motifStartT - 1;
-								for (; j >= intersectIntv.first; --j) {
-									CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
-									if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
-										isSave = false;
-										break;
-									}
-								}
-							}
-
-							if (isSave) {
-								motif = DBG_NEW TMotifII(motifStartT, motifEndT);
-								subCCEnd = tempCC->subCCs[i].end();
-								for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
-									motif->addEdge(tempCC->edges[*edgeIter]);
-								}
-								result[savePos].emplace_back(motif);
-								motifNumber++;
-							}
-						}
-					}
-					else {
-						Test::gne211+= tempCC->subCCs[i].size();
+					if (intersectIntv.first == motifStartT) {//non left expandable => non both expandable
+						Test::gne2121 += tempCC->subCCs[i].size();
+						//Test::gne2121++;
 						Test::gnefield++;
 
 						motif = DBG_NEW TMotifII(motifStartT, motifEndT);
@@ -1713,81 +1832,58 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 						}
 						result[savePos].emplace_back(motif);
 						motifNumber++;
+
 					}
-				}
-				else {
-					//BEGIN_NSTIMER; 
-					getIntersectionOfScope(tempCC->subCCs[i], tempCC->edges, intersectIntv);
-					
-					//cout << Test::counter << " # " << Test::counter2 << " " << Test::counter3 << " " << intersectIntv.first << " " << intersectIntv.second << endl;
-					if (/*motifStartT == 0 || */intersectIntv.first == motifStartT) {//only check right expandable
+					else {//left expandable or both expandable
+						//if (allNTimestamp > nEdge) {
+						//	int maxP = 0x7fffffff , minP = -1;
+						//	for (auto p : tempCC->subCCs[i]) {
+						//		auto e = tempCC->edges[p];
+						//		int edgeP = edgeBefP + e;
+						//		maxP = min(maxP, edgeBef[edgeP].first);
+						//		minP = max(minP, edgeBef[edgeP].second);
+						//		if (minP > maxP) break;
+						//	}
+						//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+						//	if (minP <= maxP && minP != -1) return;
+						//}
 
-						Test::gne221+= tempCC->subCCs[i].size();
-						int tempField;
-						if (intersectIntv.second - motifEndT - 1 > 0) {
-							tempField = (intersectIntv.second - motifEndT - 1) * (motifStartT - intersectIntv.first + 1);
-							//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
-						}else tempField = 0;
-						Test::gnefield += tempField*tempCC->subCCs[i].size();
-						Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
-						CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
-						if (!bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, motifStartT - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
-							//Test::counter3++;
-							motif = DBG_NEW TMotifII(motifStartT, motifEndT);
-							subCCEnd = tempCC->subCCs[i].end();
-							for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
-								motif->addEdge(tempCC->edges[*edgeIter]);
-							}
-							result[savePos].emplace_back(motif);
-							motifNumber++;
-						}
-						//else Test::counter4++;
+						Test::gne2122 += tempCC->subCCs[i].size();
+						//Test::gne2122++;
+						int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first);
+						Test::gnefield += tempField * tempCC->subCCs[i].size();
+						//Test::gnefield += tempField;
+						Test::gnemaxfield = max(Test::gnemaxfield, tempField);
 
-
-						//Test::counter += END_NSTIMER;
-					}
-					else {//left expandable, right expandable or both expandable
-
-						Test::gne222+= tempCC->subCCs[i].size();
-						int tempField = (intersectIntv.second - motifEndT) * (motifStartT - intersectIntv.first);
-						Test::gnefield += tempField* tempCC->subCCs[i].size();
-						Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
-
-						//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
 						bool isSave = true;
-						if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
+						if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
 							int j = intersectIntv.second;
-							for (; j > motifEndT; --j) {
-								CLEARALL(expandMask, true, motifStartT - intersectIntv.first + 1, bool);
-								if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - startT, j - startT, motifStartT - startT, expandMask)) {//O(tEs)
+							for (; j >= motifEndT; --j) {
+								CLEARALL(expandMask, true, motifStartT - intersectIntv.first, bool);
+								if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - 1 - startT, j - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
-
 									break;
 								}
 							}
 						}
 						else {
-							int j = motifStartT;
-							for (; j >= intersectIntv.first; --j) {
-								CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
-								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
+							int j = intersectIntv.first;
+							for (; j <= motifStartT - 1; ++j) {
+								CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
+								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
 									break;
 								}
 							}
+							/*if (motifStartT == 2 && ccPos->first == 13) {
+								for (int i = motifEndT; i <= intersectIntv.second; i++) {
+									cout << expandMask[i - motifEndT] << "^" << endl;
+								}
+							}*/
 						}
 
+						//cout << "$1 " << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << " " << isSave << endl;
 						if (isSave) {
-							CLEARALL(expandMask, true, motifStartT - intersectIntv.first, bool);
-							if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - 1 - startT, motifEndT - startT, motifStartT - startT, expandMask)) {//O(tEs)
-								isSave = false;
-
-							}
-
-						}
-
-						if (isSave) {
-							//Test::counter3++;
 							motif = DBG_NEW TMotifII(motifStartT, motifEndT);
 							subCCEnd = tempCC->subCCs[i].end();
 							for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
@@ -1795,25 +1891,164 @@ void TGraph::checkExpandableOpt1(int savePos, CComponentsII* temp,
 							}
 							result[savePos].emplace_back(motif);
 							motifNumber++;
-						}
-						//else Test::counter4++;
 
-						//Test::counter2 += END_NSTIMER;
+						}
 					}
-					//}
 				}
+				else {
+					Test::gne211 += tempCC->subCCs[i].size();
+					//Test::gne211++;
+					Test::gnefield++;
+
+					motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+					subCCEnd = tempCC->subCCs[i].end();
+					for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
+						motif->addEdge(tempCC->edges[*edgeIter]);
+					}
+					result[savePos].emplace_back(motif);
+					motifNumber++;
+
+				}
+			}
+			else {
+				//BEGIN_NSTIMER; 
+				getIntersectionOfScope(tempCC->subCCs[i], tempCC->edges, intersectIntv);
+				
+				//cout << Test::counter << " # " << Test::counter2 << " " << Test::counter3 << " " << intersectIntv.first << " " << intersectIntv.second << endl;
+				if (/*motifStartT == 0 || */intersectIntv.first == motifStartT) {//only check right expandable
+					
+					Test::gne221 += tempCC->subCCs[i].size();
+					//Test::gne221++;
+					int tempField;
+					tempField = intersectIntv.second - motifEndT;
+					Test::gnefield += tempField * tempCC->subCCs[i].size();
+					//Test::gnefield += tempField;
+					Test::gnemaxfield = max(Test::gnemaxfield, tempField);
+					CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
+					if (!bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, motifStartT - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
+						//cout << "$2 " << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << " " << 1 << endl;
+							
+						motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+						subCCEnd = tempCC->subCCs[i].end();
+						for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
+							motif->addEdge(tempCC->edges[*edgeIter]);
+						}
+						result[savePos].emplace_back(motif);
+						motifNumber++;
+
+					}
+						//cout << "$3 " << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << " " << 0 << endl;
+
+
+
+					//Test::counter += END_NSTIMER;
+				}
+				else {//left expandable, right expandable or both expandable
+					//if (allNTimestamp > nEdge) {
+					//	int maxP = 0x7fffffff, minP = -1;
+					//	for (auto p : tempCC->subCCs[i]) {
+					//		auto e = tempCC->edges[p];
+					//		int edgeP = edgeBefP + e;
+					//		maxP = min(maxP, edgeBef[edgeP].first);
+					//		minP = max(minP, edgeBef[edgeP].second);
+					//		if (minP > maxP) break;
+					//	}
+					//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+					//	if (minP <= maxP && minP != -1) return;
+					//}
+
+					Test::gne222 += tempCC->subCCs[i].size();
+					//Test::gne222++;
+					int tempField = (intersectIntv.second - motifEndT + 1) * (motifStartT - intersectIntv.first + 1) - 1;
+					Test::gnefield += tempField * tempCC->subCCs[i].size();
+					//Test::gnefield += tempField;
+					Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
+
+					bool isSave = true;
+					if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
+						int j = intersectIntv.second;
+						for (; j > motifEndT; --j) {
+							CLEARALL(expandMask, true, motifStartT - intersectIntv.first + 1, bool);
+							if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - startT, j - startT, motifStartT - startT, expandMask)) {//O(tEs)
+								isSave = false;
+								break;
+							}
+						}
+					}
+					else {
+						int j = intersectIntv.first;
+						for (; j <= motifStartT; ++j) {
+							CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
+							if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
+								isSave = false;
+								break;
+							}
+						}
+
+						/*if (!isSave && motifStartT == 2 && ccPos->first == 13) {
+							for (int s = motifEndT + 1; s <= intersectIntv.second; s++) {
+								cout << j << " " << s << " " << expandMask[s - motifEndT - 1] << "^" << endl;
+							}
+						}*/
+					}
+
+					if (isSave) {
+						CLEARALL(expandMask, true, motifStartT - intersectIntv.first, bool);
+						if (bothFitDefAndSameLabelChangeStartTimePos(tempCC->subCCs[i], tempCC->edges, intersectIntv.first - startT, motifStartT - 1 - startT, motifEndT - startT, motifStartT - startT, expandMask)) {//O(tEs)
+							isSave = false;
+						}
+						/*if (!isSave && motifStartT == 2 && ccPos->first == 13) {
+							for (int i = intersectIntv.first; i <= motifStartT - 1; i++) {
+								cout << i<< " "<<expandMask[i - intersectIntv.first] << "^" << endl;
+							}
+						}*/
+					}
+
+					//cout << "$4 " << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << " " << isSave << endl;
+						
+					if (isSave) {
+						//Test::counter3++;
+						motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+						subCCEnd = tempCC->subCCs[i].end();
+						for (auto edgeIter = tempCC->subCCs[i].begin(); edgeIter != subCCEnd/*edgeEnd*/; ++edgeIter/*, ++subCCIter*/) {//O(motif number)
+							motif->addEdge(tempCC->edges[*edgeIter]);
+						}
+						result[savePos].emplace_back(motif);
+						motifNumber++;
+					}
+
+					//Test::counter2 += END_NSTIMER;
+				}
+				//}
+			}
 			//}
+
+			/*if (allNTimestamp > nEdge) {
+				for (auto p : tempCC->subCCs[i]) {
+					auto e = tempCC->edges[p];
+					int edgeP = edgeBefP + e;
+					if (edgeBef[edgeP].second + 1 == motifStartT) {
+						if (motifStartT == 0) {
+							edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+						}
+						else edgeBef[edgeP].second = motifStartT;
+					}
+					else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+				}
+			}*/
 		}
+		//}
 	}
 }
 
 void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
-	int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber) {
+	int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber) {
 	CComponentsFRTMOPT1*tempCC = (CComponentsFRTMOPT1*)temp;
 	TMotifII* motif;
 	bool needCheck;
 	int edgeId;
 	bool isRightExpandable;
+	//int edgeBefP = motifEndT * nEdge;
 	pair<int, int> intersectIntv;
 	auto edgeEnd = tempCC->edges.end(); 
 	if (tempCC->subCCNum == 0) {//not edges removed  (must be non right expandable)
@@ -1843,7 +2078,16 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 				//Test::gnefield += tempField;
 				//Test::gnemaxfield = max(Test::gnemaxfield,tempField);
 				//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
-
+				/*if (allNTimestamp > nEdge) {
+					int maxP = 0x7fffffff, minP = -1;
+					for (auto e : tempCC->edges) {
+						int edgeP = edgeBefP + e;
+						maxP = min(maxP, edgeBef[edgeP].first);
+						minP = max(minP, edgeBef[edgeP].second);
+						if (minP > maxP) break;
+					}
+					if (minP <= maxP && minP != -1) return;
+				}*/
 				bool isSave = true;
 
 				if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
@@ -1858,8 +2102,8 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 					}
 				}
 				else {
-					int j = motifStartT - 1;
-					for (; j >= intersectIntv.first; --j) {
+					int j = intersectIntv.first;
+					for (; j <= motifStartT - 1; ++j) {
 						CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 						if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 							isSave = false;
@@ -1900,6 +2144,19 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 			result[savePos].emplace_back(motif);
 			motifNumber++;
 		}
+
+		/*if (allNTimestamp > nEdge) {
+			for (auto e : tempCC->edges) {
+				int edgeP = edgeBefP + e;
+				if (edgeBef[edgeP].second + 1 == motifStartT) {
+					if (motifStartT == 0) {
+						edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+					}
+					else edgeBef[edgeP].second = motifStartT;
+				}
+				else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+			}
+		}*/
 		//Test::counter +=END_NSTIMER;
 	}
 	else {
@@ -1940,6 +2197,18 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 							//Test::gnefield += tempField;
 							//Test::gnemaxfield = max(Test::gnemaxfield, tempField);
 							//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
+							//if (allNTimestamp > nEdge) {
+							//	int maxP = 0x7fffffff, minP = -1;
+							//	for (auto p : tempCC->subCCs[i]) {
+							//		auto e = tempCC->edges[p];
+							//		int edgeP = edgeBefP + e;
+							//		maxP = min(maxP, edgeBef[edgeP].first);
+							//		minP = max(minP, edgeBef[edgeP].second);
+							//		if (minP > maxP) break;
+							//	}
+							//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+							//	if (minP <= maxP && minP != -1) return;
+							//}
 
 							bool isSave = true;
 							if (motifStartT - intersectIntv.first >= intersectIntv.second - motifEndT + 1) {
@@ -1953,8 +2222,8 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 								}
 							}
 							else {
-								int j = motifStartT - 1;
-								for (; j >= intersectIntv.first; --j) {
+								int j = intersectIntv.first;
+								for (; j <= motifStartT - 1; ++j) {
 									CLEARALL(expandMask, true, intersectIntv.second - motifEndT + 1, bool);
 									if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 										isSave = false;
@@ -2040,6 +2309,18 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 						//Test::gnefield += tempField;
 						//Test::gnemaxfield = max(Test::gnemaxfield, tempField);
 						//cout << tempField << " " << intersectIntv.first << " " << intersectIntv.second << " " << motifStartT << " " << motifEndT << endl;
+						//if (allNTimestamp > nEdge) {
+						//	int maxP = 0x7fffffff, minP = -1;
+						//	for (auto p : tempCC->subCCs[i]) {
+						//		auto e = tempCC->edges[p];
+						//		int edgeP = edgeBefP + e;
+						//		maxP = min(maxP, edgeBef[edgeP].first);
+						//		minP = max(minP, edgeBef[edgeP].second);
+						//		if (minP > maxP) break;
+						//	}
+						//	//if (motifStartT == 41 && motifEndT == 173) cout << minP << " @ " << maxP << endl;
+						//	if (minP <= maxP && minP != -1) return;
+						//}
 
 						bool isSave = true;
 						if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
@@ -2054,8 +2335,8 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 							}
 						}
 						else {
-							int j = motifStartT;
-							for (; j >= intersectIntv.first; --j) {
+							int j = intersectIntv.first;
+							for (; j <= motifStartT; ++j) {
 								CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->subCCs[i], tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
@@ -2091,29 +2372,45 @@ void TGraph::checkExpandableOpt1MidR(int savePos, CComponentsII* temp,
 						//Test::counter2 += END_NSTIMER;
 					}
 				}
+
+				/*if (allNTimestamp > nEdge) {
+					for (auto p : tempCC->subCCs[i]) {
+						auto e = tempCC->edges[p];
+						int edgeP = edgeBefP + e;
+						if (edgeBef[edgeP].second + 1 == motifStartT) {
+							if (motifStartT == 0) {
+								edgeBef[edgeP].first = edgeBef[edgeP].second = 0;
+							}
+							else edgeBef[edgeP].second = motifStartT;
+						}
+						else edgeBef[edgeP].first = edgeBef[edgeP].second = motifStartT;
+					}
+				}*/
 		}
 	}
 }
 
 void TGraph::expCheckFRTM(vec(int)&saveCCPos,
 	vec(CComponentsII*)& setCC,
-	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 	long long& motifNumber, CheckExpandable checkExpandable) {
 	int savePos = resultPos(motifStartT, motifEndT, startT, endT, k);
-	veciter(int) saveMotifEnd = saveCCPos.end(), subCCEnd;
+	auto saveMotifEnd = saveCCPos.end();
 	CComponentsII* tempCC;
 	for (auto saveMotifIter = saveCCPos.begin();
 		saveMotifIter != saveMotifEnd; ++saveMotifIter) {//need check expandable
 		//Util::output(motifStartT, motifEndT, *saveMotifIter);
-		/*Test::counter = motifStartT;
-		Test::counter2 = motifEndT;
-		Test::counter3 = *saveMotifIter;*/
+		auto a = std::chrono::steady_clock::now();
 		tempCC = setCC[*saveMotifIter];
-		(this->*checkExpandable)(savePos, tempCC, motifStartT, motifEndT, expandMask, result, motifNumber);
+		
+		(this->*checkExpandable)(savePos, tempCC, motifStartT, motifEndT, expandMask, /*expCheck, saveMotifIter,*/ result, motifNumber);
 
 		int edgeNum = (int)tempCC->edges.size();
+		//cout << saveMotifIter->first <<  " @ "<<std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - a).count()<< endl;
+		
 		if (edgeNum > tempCC->newInsert) {
 			tempCC->newInsert = edgeNum;
+			//expCheck.erase(saveMotifIter->first);
 		}
 	}
 	saveCCPos.clear();
@@ -2121,7 +2418,7 @@ void TGraph::expCheckFRTM(vec(int)&saveCCPos,
 
 void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 	vec(CComponentsShortIntv*)& setCCShortIntv,
-	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 	long long& motifNumber, DynamicConnectivity*& connectivity, unordered_map<int, LinkedNode<int>*>& hasChecked, i2iHMap& root2Comp, i2iHMap& vertex2Pos, vec(CComponentsII*)& setCC) {
 	int savePos = resultPos(motifStartT, motifEndT, startT, endT, k);
 	veciter(int) saveMotifEnd = saveCCPos.end();
@@ -2139,7 +2436,8 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 			
 			if (intersectIntv.second == -1) {//only in [motifStartT, motifStartT+limited)
 				Test::gnenonoise += tempCC->edges.size();
-				Test::gnefield++;
+				//Test::gnenonoise++;
+				//Test::gnefield++;
 
 				motif = DBG_NEW TMotifII(motifStartT, motifEndT);
 				motif->copyEdges(tempCC->edges);
@@ -2157,15 +2455,17 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 				}
 				
 				if (tempCC->haveNonExpand || !unsavedBefore) {//check expandable
+					Test::gnenonoise+= tempCC->edges.size();
+					//Test::gnenonoise++;
 					if (intersectIntv.first == motifStartT) {//only check right expandable
-						Test::gnenonoise+= tempCC->edges.size();
 						int tempField;
 						if (intersectIntv.second - motifEndT - 1 > 0) {
 							tempField = intersectIntv.second - motifEndT - 1;
 						}
 						else tempField = 0;
 						Test::gnefield += tempField * tempCC->edges.size();
-						Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
+						//Test::gnefield += tempField;
+						Test::gnemaxfield = max(Test::gnemaxfield, tempField);
 						//Test::counter4 += tempField;
 						//Test::counter5++;
 						CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
@@ -2177,13 +2477,12 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 						}
 					}
 					else {//left expandable, right expandable or both expandable
-						Test::gnenonoise+=tempCC->edges.size();
+						//Test::gnenonoise+=tempCC->edges.size();
 						int tempField = (intersectIntv.second - motifEndT) * (motifStartT - intersectIntv.first);
 						Test::gnefield += tempField * tempCC->edges.size();
+						//Test::gnefield += tempField;
 						Test::gnemaxfield = max(Test::gnemaxfield, tempField);/**/
 						
-						//Test::counter4 += tempField;
-						//Test::counter5++;
 						bool isSave = true;
 						if (motifStartT - intersectIntv.first + 1 >= intersectIntv.second - motifEndT) {
 							int j = intersectIntv.second;
@@ -2196,8 +2495,8 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 							}
 						}
 						else {
-							int j = motifStartT;
-							for (; j >= intersectIntv.first; --j) {
+							int j = intersectIntv.first;
+							for (; j <= motifStartT; ++j) {
 								CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
@@ -2219,15 +2518,7 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 						}
 					}
 				}
-				else {
-				//	Test::gnenonoise += tempCC->edges.size();
-				//	Test::gnefield++;
-				}
 			}
-		}
-		else {
-		//	Test::gnenonoise += tempCC->edges.size();
-		//	Test::gnefield++;
 		}
 	}
 	saveCCPos.clear();
@@ -2235,7 +2526,7 @@ void TGraph::expCheckFRTMPlus(vec(int)&saveCCPos,
 
 void TGraph::expCheckFRTMPlusMidR(vec(int)&saveCCPos,
 	vec(CComponentsShortIntv*)& setCCShortIntv,
-	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+	vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 	long long& motifNumber, DynamicConnectivity*& connectivity, unordered_map<int, LinkedNode<int>*>& hasChecked, i2iHMap& root2Comp, i2iHMap& vertex2Pos, vec(CComponentsII*)& setCC) {
 	int savePos = resultPos(motifStartT, motifEndT, startT, endT, k);
 	veciter(int) saveMotifEnd = saveCCPos.end();
@@ -2310,8 +2601,8 @@ void TGraph::expCheckFRTMPlusMidR(vec(int)&saveCCPos,
 							}
 						}
 						else {
-							int j = motifStartT;
-							for (; j >= intersectIntv.first; --j) {
+							int j = intersectIntv.first;
+							for (; j <= motifStartT; ++j) {
 								CLEARALL(expandMask, true, intersectIntv.second - motifEndT, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(tempCC->edges, j - startT, motifEndT + 1 - startT, intersectIntv.second - startT, motifStartT - startT, expandMask)) {//O(tEs)
 									isSave = false;
@@ -2481,6 +2772,7 @@ void TGraph::updateNewEdgeInfoPlus(
 	for (int addEIter = 0; addEIter < addENum; ++addEIter) {//new edges in R edge sets
 		veciter(int) infoIter = infoBegin + addE[addEIter];
 		id = *infoIter;//edge's id
+		//cout << startTime << " " << endTime << " " << id << endl;
 
 		/*the root of the edge's vertex in the disjoint set*/
 		root = connectivity->findRoot(vertex2PosShortIntv[edgeList[id].first]);
@@ -2635,6 +2927,7 @@ void TGraph::findRTMotifsDynamic(int k,
 	int* subCCId = DBG_NEW int[nEdge];
 #pragma endregion
 	vector<pair<int, int>> tempRecordFromQueue;
+	//i2tupHMap expCheck;
 	int id, Tsk = startT + k - 1;
 	//traverse all possible intervals' start time
 	//TGraph::tempUsedForComputeRESDYN = (oriEndT+1)*nEdge;
@@ -2734,7 +3027,7 @@ void TGraph::findRTMotifsDynamic(int k,
 
 			BEGIN_TIMER(d)
 				expCheckFRTM(saveMotifPos, setCC, newResult, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableFRTMMidR);
+					edgeEndT, expandMask,/* expCheck,*/ motifNumber, &TGraph::checkExpandableFRTMMidR);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 
@@ -2799,8 +3092,8 @@ void TGraph::findRTMotifsDynamic(int k,
 						}
 					}
 					else {
-						int j = Ts;
-						for (; j >= maxLeft; --j) {
+						int j = maxLeft;
+						for (; j <= Ts; ++j) {
 							CLEARALL(expandMask, true, minRight - scanMotifEndT, bool);
 							if (bothFitDefAndSameLabelChangeEndTimePos(*motifEdges, j - startT, scanMotifEndT + 1 - startT, minRight - startT, Ts - startT, expandMask)) {//O(tEs)
 								isSave = false;
@@ -2922,6 +3215,8 @@ void TGraph::findRTMotifsDynamicOpt1(int k,
 	int* remainEdges = DBG_NEW int[nEdge];
 #pragma endregion
 	vector<pair<int, int>> tempRecordFromQueue;
+	//i2tupHMap expCheck;
+
 	int id, Tsk = startT + k - 1;
 	//traverse all possible intervals' start time
 	//TGraph::tempUsedForComputeRESDYN = (oriEndT+1)*nEdge;
@@ -3023,7 +3318,7 @@ void TGraph::findRTMotifsDynamicOpt1(int k,
 
 			BEGIN_TIMER(d)
 				expCheckFRTM(saveMotifPos, setCC, newResult, k, Ts,
-					edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1MidR);
+					edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1MidR);
 			Test::gne += END_TIMER(d);
 			edgeSetsR[tempT].clear();
 		}
@@ -3087,8 +3382,8 @@ void TGraph::findRTMotifsDynamicOpt1(int k,
 						}
 					}
 					else {
-						int j = Ts;
-						for (; j >= maxLeft; --j) {
+						int j = maxLeft;
+						for (; j <= Ts; ++j) {
 							CLEARALL(expandMask, true, minRight - scanMotifEndT, bool);
 							if (bothFitDefAndSameLabelChangeEndTimePos(*motifEdges, j - startT, scanMotifEndT + 1 - startT, minRight - startT, Ts - startT, expandMask)) {//O(tEs)
 								isSave = false;
@@ -3235,6 +3530,8 @@ void TGraph::findRTMotifsDynamicPlus(int k,
 		//iSet saveR(nNode);
 		bool* saveR = DBG_NEW bool[nNode];
 		int id, Tsk = startT + k - 1;
+		//i2tupHMap expCheck;
+
 		//traverse all possible intervals' start time
 		TGraph::posUsedForEdgeFilter = 0;
 		TGraph::posUsedForEdgeFilterShortIntv = (startT + k - 1)*nEdge;
@@ -3368,7 +3665,7 @@ void TGraph::findRTMotifsDynamicPlus(int k,
 #pragma endregion
 					BEGIN_TIMER(d)
 						expCheckFRTM(saveMotifPos, setCC, newResult, k, Ts,
-							edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1MidR);
+							edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1MidR);
 					Test::gne += END_TIMER(d);
 					edgeSetsR[tempT].clear();
 				}
@@ -3404,7 +3701,7 @@ void TGraph::findRTMotifsDynamicPlus(int k,
 #pragma endregion
 					BEGIN_TIMER(d)
 						expCheckFRTM(saveMotifPos, setCC, newResult, k, Ts,
-							edgeEndT, expandMask, motifNumber, &TGraph::checkExpandableOpt1MidR);
+							edgeEndT, expandMask, /*expCheck,*/ motifNumber, &TGraph::checkExpandableOpt1MidR);
 					Test::gne += END_TIMER(d);
 					edgeSetsR[tempT].clear();
 				}
@@ -3431,7 +3728,7 @@ void TGraph::findRTMotifsDynamicPlus(int k,
 
 					BEGIN_TIMER(d)
 						expCheckFRTMPlusMidR(saveMotifPosNoNoise, setCCShortIntv,
-							newResult, k, Ts, edgeEndT, expandMask, motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
+							newResult, k, Ts, edgeEndT, expandMask, /*expCheck,*/ motifNumber, disjointSet, hasChecked, root2Comp, vertex2Pos, setCC);
 					Test::gne += END_TIMER(d);
 					edgeSetsRNoNoise[tempT].clear();
 				}
@@ -3502,8 +3799,8 @@ void TGraph::findRTMotifsDynamicPlus(int k,
 							}
 						}
 						else {
-							int j = Ts;
-							for (; j >= maxLeft; --j) {
+							int j = maxLeft;
+							for (; j <= Ts; ++j) {
 								CLEARALL(expandMask, true, minRight - scanMotifEndT, bool);
 								if (bothFitDefAndSameLabelChangeEndTimePos(*motifEdges, j - startT, scanMotifEndT + 1 - startT, minRight - startT, Ts - startT, expandMask)) {//O(tEs)
 									isSave = false;

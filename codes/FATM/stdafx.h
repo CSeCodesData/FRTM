@@ -85,6 +85,11 @@ using namespace std;
 #define veciter(a) vector<a>::iterator
 #define vecriter(a) vector<a>::reverse_iterator
 
+using ibPairVec = vector<pair<int, bool>>;
+using ibPairVec_Iter = vector<pair<int, bool>>::iterator;
+
+using i2tupHMap = unordered_map<int, tuple<int,int,bool>>;
+using i2tupHMap_Iter = unordered_map<int, tuple<int, int, bool>>::iterator;
 using i2iHMap = unordered_map<int, int>;
 using iSet = unordered_set<int>;
 using i2bHMap = unordered_map<int, bool>;

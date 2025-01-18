@@ -157,7 +157,7 @@ public:
 		GetProcessMemoryInfo(currentProcess, &pmc, sizeof(pmc));
 		if (peakMemory < pmc.WorkingSetSize) peakMemory = pmc.WorkingSetSize;
 
-		if (peakMemory / 1073741824 > 58) {
+		if (peakMemory / 1073741824 > 64) {
 			cout << "out of memory" << endl;
 			exit(0);
 		}

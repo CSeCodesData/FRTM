@@ -5193,6 +5193,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 		}
 		labelsSum = currentPos - beginPos;
 
+        auto a = std::chrono::steady_clock::now(); 
 		int tempTimestampPosForIT = currentPos * nEdge + i;
 
 		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
@@ -5255,7 +5256,11 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 		}
 		scanT[mainLabelPos] = nextLabPos - 1;
 
-
+		//if (intvB == 0) {
+		//	long long b = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - a).count();
+		//	//cout << b << endl;
+		//	Test::counter += b;
+		//}
 		if (lastMainLabelPos < endPos) {
 			if (saveNoNoise) {
 				newE[newENum++] = i;
@@ -7080,6 +7085,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int s
 		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForEndTime = endTimePos * nEdge + edgeId;
 		if (label != lab[tempPosForEndTime]) {
+			//cout << mainLabelPos << " " << endTimePos << " " << edgeId << "%%" << endl;
 			return false;
 		}
 		p = startTimePos2;
@@ -7124,6 +7130,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int s
 			tempstampPosForEL = p * nEdge + edgeId;
 			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
 		}
+		//cout << field << " " << edgeId << endl;
 		if (field == 0)break;
 	}
 	return field != 0;
@@ -7188,6 +7195,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int*&
 				tempstampPosForEL = p * nEdge + edgeId;
 				if (p >= 0) next = p - max(bef[tempstampPosForEL], 1);
 			}
+			//cout << field << " " << edgeId << endl;
 			if (field == 0)break;
 		}
 	}
@@ -7252,6 +7260,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& subCCs, vec(
 			tempstampPosForEL = p * nEdge + edgeId;
 			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
 		}
+		//cout << field << " " << edgeId << endl;
 		if (field == 0)break;
 	}
 	return field != 0;
@@ -7271,6 +7280,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(in
 		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForStartTime = startTimePos * nEdge + edgeId;
 		if (label != lab[tempPosForStartTime]) {
+			//cout << mainLabelPos << " "<< startTimePos<<" "<<edgeId << "%"<< endl;
 			return false;
 		}
 		p = endTimePos2;
@@ -7316,9 +7326,10 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(in
 			tempstampPosForEL = p * nEdge + edgeId;
 			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
 		}
+		//if(Test::counter == -1) cout << field << " " << edgeId << endl;
 		if (field == 0)break;
 	}
-	
+	//if (Test::counter == -1) cout << field << endl;
 	return field != 0;
 }
 bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask) {
@@ -7348,6 +7359,9 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int sta
 				for (int tabu = p; tabu >= stopP; tabu--) {
 					if (expandMask[tabu - endTimePos1]) {
 						field--;
+						/*if(Test::counter == -1 && tabu == 26273) {
+							cout << startTimePos << " "<<edgeId << "%%" << endl;
+						}*/
 						expandMask[tabu - endTimePos1] = false;
 						if (field == 0)break;
 					}
@@ -7368,6 +7382,9 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int sta
 						for (int tabu = min(noiseT, endTimePos2); tabu >= endTimePos1 && tabu >= next; tabu--) {
 							if (expandMask[tabu - endTimePos1]) {
 								field--;
+								/*if (Test::counter == -1 && tabu == 26273) {
+									cout << startTimePos << " " << edgeId <<"%%"<<endl;
+								}*/
 								expandMask[tabu - endTimePos1] = false;
 								if (field == 0)break;
 							}
@@ -7380,6 +7397,7 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int sta
 			tempstampPosForEL = p * nEdge + edgeId;
 			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
 		}
+		//cout << field << " " << edgeId << endl;
 		if (field == 0)break;
 
 	}

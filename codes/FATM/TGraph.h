@@ -148,6 +148,7 @@ public:
 
 	/*print motif with specific edge*/
 	void printMotif(TMotifII*& motif, int motifId, int node1 = -1, int node2 = -1);
+	void printMotif2(TMotifII*& motif, int motifId);
 	
 	/*test whether a motif have all edges with same label in endpoints of interval*/
 	virtual void checkMotifEndpointsD5(TMotifII*& motif) = 0;
@@ -338,34 +339,34 @@ public:
 
 		//expandable checking for ccs in each interval
 		using CheckExpandable = void (TGraph::*)(int savePos, CComponentsII* tempCC,
-			int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber);
+			int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos, */vec(TMotifII*)*& result, long long& motifNumber);
 		void expCheck(vec(int)&saveCCPos,
 			vec(CComponents*)& tempComponents,
 			vec(TMotifI*)*& result, int k, int motifStartT, int motifEndT,
 			long long& motifNumber);
-		void expCheckFRTM(vec(int)&saveCCPos,
+		void expCheckFRTM(vec(int)& saveCCPos,
 			vec(CComponentsII*)& tempComponents,
-			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 			long long& motifNumber, CheckExpandable checkExpandable);
 		void expCheckFRTMPlus(vec(int)&saveCCPos,
 			vec(CComponentsShortIntv*)& tempComponentsNoNoise,
-			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 			long long& motifNumber, DynamicConnectivity*& connectivity, unordered_map<int, LinkedNode<int>*>& hasChecked, i2iHMap& root2Comp, i2iHMap& vertex2Pos,
 			vec(CComponentsII*)& tempComponents);
 		void expCheckFRTMPlusMidR(vec(int)&saveCCPos,
 			vec(CComponentsShortIntv*)& tempComponentsNoNoise,
-			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask,
+			vec(TMotifII*)*& result, int k, int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck,*/
 			long long& motifNumber, DynamicConnectivity*& connectivity, unordered_map<int, LinkedNode<int>*>& hasChecked, i2iHMap& root2Comp, i2iHMap& vertex2Pos, vec(CComponentsII*)& tempComponents);
 		
 		//expandable checking for each cc
 		void checkExpandableFRTM(int savePos, CComponentsII* tempCC,
-			int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber);
+			int motifStartT, int motifEndT, bool*& expandMask, /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber);
 		void checkExpandableFRTMMidR(int savePos, CComponentsII* tempCC,
-			int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber);
+			int motifStartT, int motifEndT, bool*& expandMask,  /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/vec(TMotifII*)*& result, long long& motifNumber);
 		void checkExpandableOpt1(int savePos, CComponentsII* tempCC,
-			int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber);
+			int motifStartT, int motifEndT, bool*& expandMask,  /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber);
 		void checkExpandableOpt1MidR(int savePos, CComponentsII* tempCC,
-			int motifStartT, int motifEndT, bool*& expandMask, vec(TMotifII*)*& result, long long& motifNumber);
+			int motifStartT, int motifEndT, bool*& expandMask,  /*i2tupHMap& expCheck, ibPairVec_Iter ccPos,*/ vec(TMotifII*)*& result, long long& motifNumber);
 
 		#pragma endregion
 
@@ -473,6 +474,7 @@ protected:
 		int *posInEIntR = nullptr, *newPosInEIntR = nullptr;//the position of edge stored in the EIntR for each edge
 		vec(MotifPos)* MIntR = nullptr, *newMIntR = nullptr;
 
+		//pair<int,int>* edgeBef = nullptr;
 public:
 
 	//static int saveEdgesControl;//save the disjoint set if the number of edges in sub-connected components > saveEdgesControl

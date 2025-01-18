@@ -52,6 +52,11 @@ void TGraph::createStructForDefType() {
 
 	preMaxIntv = DBG_NEW CircularQueue<NVIntv>[nEdge];
 
+	/*if (allNTimestamp > nEdge) {
+		edgeBef = DBG_NEW pair<int, int>[size];
+		CLEARALL(edgeBef, -1, size << 1, int);
+	}*/
+
 	if (Setting::choice == AlgorithmType::DFRTM || Setting::choice == AlgorithmType::FRTMFORDYN
 		|| Setting::choice == AlgorithmType::DFRTMOPT1 || Setting::choice == AlgorithmType::FRTMOPT1DYN
 		|| Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
@@ -72,7 +77,10 @@ void TGraph::releaseStructForDefType() {
 	delete[] preMaxIntv;
 	delete[] scanT;
 	delete[] vioT;
-		
+	/*if (allNTimestamp > nEdge) {
+		delete[] edgeBef;
+	}*/
+
 	if (Setting::choice == AlgorithmType::FRTMPLUS|| Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
 		delete[] maxIntvShortIntv;
 	}
@@ -484,3 +492,18 @@ void TGraph::printMotif(TMotifII*& motif, int motifId, int node1, int node2) {
 	}
 }
 
+void TGraph::printMotif2(TMotifII*& motif, int motifId) {
+	vec(int)* motifEdge = motif->getMotifEdge();
+	veciter(int) listEnd = motifEdge->end();
+	sort(motifEdge->begin(), listEnd);
+	cout << MOTIF_ID << motifId << endl;
+	cout << EDGE_NUM << motif->getSize() << endl;
+	//vec(int)* maskEdge = motif->getMaskEdge();
+
+	NodePair *edge;
+	//bool finded;
+	for (auto iter = motifEdge->begin();
+		iter != listEnd; ++iter) {
+		cout << *iter << "," << idToLabel[getEdgeLabel(*iter, motif->getStartT())] << endl;
+	}
+}
