@@ -16,12 +16,6 @@ TGraphUDEL::TGraphUDEL(const TGraphUDEL& ances):TGraph(ances) {
 void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 	int size = allNTimestamp * nEdge, timestampPosForEL, timestampPosForELBre;
 
-	lab = DBG_NEW int[size];
-	bef = DBG_NEW int[size];
-	aft = DBG_NEW int[size];
-	for (int i = 0; i < size; i++) {
-		lab[i] = 0x7fffffff;
-	}
 	
 	int nodeNum = 0;//node num
 	int flagT = -1;//check the same time as the first input data
@@ -94,7 +88,14 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		LOAD_ERROR
 	}
 
+	cout << "before create DEL: "; Test::showMemoryUse();
 	BEGIN_TIMER(b)
+	lab = DBG_NEW int[size];
+	bef = DBG_NEW int[size];
+	aft = DBG_NEW int[size];
+	for (int i = 0; i < size; i++) {
+		lab[i] = 0x7fffffff;
+	}
 	size_t length = u_arr.size();
 	for (size_t i = 0; i < length; i++) {
 		u = u_arr[i];
@@ -159,7 +160,8 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 			dif[timestampPos + id] = j + 1 - tempLabelsNum[labelId];
 		}
 	}
-	
+	cout << "after create DEL: "; Test::showMemoryUse();
+
 	auto iterEnd = this->labelToId.end();
 	this->idToLabel = DBG_NEW int[this->labelToId.size()];
 	for (auto iter = this->labelToId.begin(); iter != iterEnd; ++iter) {

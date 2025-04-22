@@ -178,12 +178,18 @@ int main(int argc, char* argv[]) {
 				WRONG_A_P
 				return -1;
 			}
+			else if (Setting::delta == 0) {
+				Setting::c = 0;
+			}
 			break;
 		case 'b'://local approximation parameters
 			Setting::c = STR2INT(argv[i] + 3);
 			if (Setting::c < 0) {
 				WRONG_A_P
 				return -1;
+			}
+			else if (Setting::c == 0) {
+				Setting::delta = 0;
 			}
 			break;
 		case 'x'://Fixed the label of edge
@@ -353,6 +359,7 @@ void createTGraph(TGraph*& temporal_graph, const char* inputSrc, int indexId,
 
 	cout << *temporal_graph;
 	cout << "after create index: "; Test::showMemoryUse();
+
 	//exit(0);
 }
 #pragma endregion
