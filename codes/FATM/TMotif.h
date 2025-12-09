@@ -12,6 +12,19 @@ struct QueueItem {
 	}
 };
 
+struct NoisePos {
+	int startTime;
+	int pos;
+	NoisePos(int startT, int p) {
+		startTime = startT;
+		pos = p;
+	}
+	bool operator<(const NoisePos & nosieP) const {
+		return (startTime < nosieP.startTime ||
+			(startTime == nosieP.startTime && pos < nosieP.pos));
+	}
+};
+
 #pragma region connected components
 struct SaveCCInfo {
 	int savePos;//cc's saving position in the result
@@ -32,227 +45,7 @@ struct SaveCCInfo {
 		savePos = saveEndTime = saveCCInfoPos = -1;
 	}
 };
-/*used in precise method and GLOBALFIXNUM*/
-class CComponents {
-public:
-	vec(TEdge) edges;//cc's edges with labels
-	vec(SaveCCInfo) saveInfo;//cc's saving information in the result
-	int startT;//the starting timestamp of cc.intvl
-	int root;//the root of cc in disjoint set
-	//bool overlapFlag;//whether overlap with other components
-	//int LastNoisePos;// the condition when motif is left expandable
-	CComponents(int start, int root) :startT(start),
-		root(root)/*, overlapFlag(true)*/{}
-	CComponents() = default;
-	~CComponents() = default;
-};
 
-class CComponentsShortIntv {
-public:
-	vec(int) edges;//cc's edges with labels
-	int startT;//the starting timestamp of cc.intvl
-	int root;//the root of cc in disjoint set
-	int scopeL, scopeR;// scope[e] for each e in cc
-	bool haveNonExpand;//whether has non-expandable edges
-
-	CComponentsShortIntv(int start, int root) :startT(start),
-		root(root), haveNonExpand(false){}
-	CComponentsShortIntv() = default;
-	~CComponentsShortIntv() = default;
-
-
-	virtual void combineFrom(CComponentsShortIntv*& other) {
-		vec(int)& tempEdges = other->edges;//edges of currentCComponents
-		int size = (int)edges.size();
-		edges.resize(size + tempEdges.size());
-		copy(tempEdges.begin(), tempEdges.end(), edges.begin() + size);
-
-		if (startT < other->startT) {
-			startT = other->startT;
-		}
-		haveNonExpand |= other->haveNonExpand;
-		scopeL = max(scopeL, other->scopeL);
-		scopeR = min(scopeR, other->scopeR);
-	}
-};
-
-
-class CComponentsII {
-public:
-	vec(int) edges;//cc's edges
-	int root;//the root of cc in disjoint set
-	int newInsert;//the start position of new inserted edges
-	
-	CComponentsII(int root) : root(root) {
-		newInsert = 0;
-	}
-	
-	CComponentsII() { 
-		newInsert = 0;
-	}
-	virtual ~CComponentsII() {
-	}
-};
-
-
-struct NoisePos {
-	int startTime;
-	int pos;
-	NoisePos(int startT, int p) {
-		startTime = startT;
-		pos = p;
-	}
-	bool operator<(const NoisePos & nosieP) const {
-		return (startTime < nosieP.startTime ||
-			(startTime == nosieP.startTime && pos < nosieP.pos));
-	}
-};
-/*cc set for FRTM*/
-class CComponentsFRTM : public CComponentsII {
-public:
-	CComponentsFRTM(int root) :CComponentsII(root){
-		subCCs = nullptr;
-		subCCsaved = nullptr;
-	}
-	CComponentsFRTM() :CComponentsII() {
-		subCCs = nullptr;
-		subCCsaved = nullptr;
-	}
-	virtual ~CComponentsFRTM() {
-		if (subCCsaved != nullptr) delete[] subCCsaved;
-		if (subCCs != nullptr) delete[] subCCs;
-	}
-
-	virtual void combineFrom(CComponentsFRTM*& other) {
-		vec(int)& tempEdges = other->edges;//edges of currentCComponents
-		int size = (int)edges.size();
-		edges.resize(size + tempEdges.size());
-		copy(tempEdges.begin(), tempEdges.end(), edges.begin() + size);
-
-		while (!other->noisePosQueue.empty()) {//combine noise position
-			auto noiseEdge = other->noisePosQueue.top();
-			noisePosQueue.emplace(noiseEdge.first, NoisePos(noiseEdge.second.startTime, noiseEdge.second.pos + size));
-			other->noisePosQueue.pop();
-		}
-		
-		while (!other->preEMaxIntvlChangePos.empty()) {
-			auto EMaxIntvlChangePos = other->preEMaxIntvlChangePos.top();
-			preEMaxIntvlChangePos.emplace(EMaxIntvlChangePos.startTime, EMaxIntvlChangePos.endTime, EMaxIntvlChangePos.id);
-			other->preEMaxIntvlChangePos.pop();
-		}
-
-		while (!other->maxEMaxIntvlStartTQueue.empty()) {
-			auto item = other->maxEMaxIntvlStartTQueue.top();
-			maxEMaxIntvlStartTQueue.emplace(item);
-			other->maxEMaxIntvlStartTQueue.pop();
-		}
-
-		minEMaxIntvlEndT = min(other->minEMaxIntvlEndT, minEMaxIntvlEndT);
-		/*while (!other->minEMaxIntvlEndTQueue.empty()) {
-			auto item = other->minEMaxIntvlEndTQueue.top();
-			minEMaxIntvlEndTQueue.emplace(item);
-			other->minEMaxIntvlEndTQueue.pop();
-		}*/
-
-		newInsert = (int)edges.size();
-		tabuTChangePos = -1;
-	}
-	vec(int)* subCCs;//sub components
-	bool* subCCsaved;//whether subCCs need to be saved  id -> saved/not saved
-	int subCCNum;//the number of subCCs
-
-	priority_queue<pair<int, NoisePos>> noisePosQueue; //the position of noise on each edge, pair=<timepos,<timeEnd,edgepos>> (maximum heap, key = timepos)
-	int minEMaxIntvlEndT;
-	priority_queue<QueueItem> preEMaxIntvlChangePos;//preMaxIntv[e] change when preMaxIntv[e][current-1].endT >= motifEndT
-
-	priority_queue<pair<int, int>, vector<pair<int, int>>, less<pair<int, int>> > maxEMaxIntvlStartTQueue; //maxEMaxIntvlStartT on each edge, pair=<maxEMaxIntvlStartT, edgeid> (maximum heap, key = maxEMaxIntvlStartT)
-	int tabuTChangePos;//the position that there exists a tabu time of an edge stop at t=nextNoiseChangePos+1
-};
-
-
-class CComponentsFRTMOPT1 : public CComponentsII {
-public:
-	CComponentsFRTMOPT1(int root) :CComponentsII(root) {
-		haveNewEdges = 0;
-		subCCs = nullptr;
-		subCCsaved = nullptr;
-	}
-	CComponentsFRTMOPT1() :CComponentsII() { 
-		haveNewEdges = 0;
-		subCCs = nullptr;
-		subCCsaved = nullptr;
-	}
-	virtual ~CComponentsFRTMOPT1() {
-		if (subCCsaved != nullptr) delete[] subCCsaved;
-		if (subCCs != nullptr) delete[] subCCs;
-	}
-
-	virtual void combineFrom(CComponentsFRTMOPT1*& other) {
-		vec(int)& tempEdges = other->edges;//edges of currentCComponents
-		int size = (int)edges.size();
-		edges.resize(size + tempEdges.size());
-		copy(tempEdges.begin(), tempEdges.end(), edges.begin() + size);
-
-		while (!other->noisePosQueue.empty()) {//combine noise position
-			auto noiseEdge = other->noisePosQueue.top();
-			noisePosQueue.emplace(noiseEdge.first, NoisePos(noiseEdge.second.startTime, noiseEdge.second.pos + size));
-			other->noisePosQueue.pop();
-		}
-
-		while (!other->preEMaxIntvlChangePos.empty()) {
-			auto EMaxIntvlChangePos = other->preEMaxIntvlChangePos.top();
-			preEMaxIntvlChangePos.emplace(EMaxIntvlChangePos.startTime, EMaxIntvlChangePos.endTime, EMaxIntvlChangePos.id);
-			other->preEMaxIntvlChangePos.pop();
-		}
-
-		while (!other->maxEMaxIntvlStartTQueue.empty()) {
-			auto item = other->maxEMaxIntvlStartTQueue.top();
-			maxEMaxIntvlStartTQueue.emplace(item);
-			other->maxEMaxIntvlStartTQueue.pop();
-		}
-
-		minEMaxIntvlEndT = min(other->minEMaxIntvlEndT, minEMaxIntvlEndT);
-		
-		newInsert = (int)edges.size();
-		tabuTChangePos = -1;
-
-		haveNewEdges |= other->haveNewEdges;
-
-	}
-	vec(int)* subCCs;//sub components
-	bool* subCCsaved;//whether subCCs need to be saved  id -> saved/not saved
-	int subCCNum;//the number of subCCs
-
-	priority_queue<pair<int, NoisePos>> noisePosQueue; //the position of noise on each edge, pair=<timepos,<timeEnd,edgepos>> (maximum heap, key = timepos)
-	priority_queue<QueueItem> preEMaxIntvlChangePos;//preMaxIntv[e] change when preMaxIntv[e][current-1].endT >= motifEndT
-
-	priority_queue<pair<int, int>, vector<pair<int, int>>, less<pair<int, int>> > maxEMaxIntvlStartTQueue; //maxEMaxIntvlStartT on each edge, pair=<maxEMaxIntvlStartT, edgeid> (maximum heap, key = maxEMaxIntvlStartT)
-	int minEMaxIntvlEndT;
-	int tabuTChangePos;//the position that there exists a tabu time of an edge stop at t=nextNoiseChangePos+1
-	bool haveNewEdges;//false: does not need check; true: need check
-};
-
-enum ComponentsD5Type : char {
-	CCFRTM,
-	CCPLUS
-};
-
-class CComponentsIID5Factory {
-	
-public:
-	static CComponentsII* instance(int root, ComponentsD5Type type) {
-		switch (type) {
-			case CCFRTM:
-				return DBG_NEW CComponentsFRTM(root);
-			case CCPLUS:
-				return DBG_NEW CComponentsFRTMOPT1(root);
-			default:
-				return nullptr;
-		}
-	}
-};
-
-#pragma endregion 
 
 #pragma region temporal motifs
 
@@ -364,7 +157,7 @@ private:
 /*used in RTMs*/
 class TMotifII {
 public:
-	TMotifII() :startT(0), endT(0), motifEdge(nullptr)/*, maskEdge(nullptr) */{}
+	TMotifII() :startT(0), endT(0), motifEdge(nullptr)/*, maskEdge(nullptr) */ {}
 
 	TMotifII(vec(int)& selectedEdge, int start, int end) {
 		startT = start;
@@ -388,13 +181,6 @@ public:
 		endT = motif.endT;
 	}
 
-
-	/* add edge to the motif*/
-	/*inline void addEdge(int id, Label edgeW) {
-		motifEdge->emplace_back(id, edgeW);
-		edgeNumber++;
-	}*/
-
 	/* add edge to the motif*/
 	inline void addEdge(int edgeId) {
 		motifEdge->emplace_back(edgeId);
@@ -405,28 +191,16 @@ public:
 		copy(motif.begin(), motif.end(), motifEdge->begin());
 	}
 
-	/*inline void copyEdges(vec(int)& motif, pair<int,int>*tabel, int pos, int stime, int etime) {
-		motifEdge->resize(motif.size());
-		copy(motif.begin(), motif.end(), motifEdge->begin());
-
-		for (auto eid : (*motifEdge)) {
-			tabel[pos + eid].first = stime;
-			tabel[pos + eid].second = etime;
-		}
-	}*/
-
 	void sortEdges() {
 		sort(motifEdge->begin(), motifEdge->end());
 	}
 
 	//size
-	inline size_t getSize() {
+	virtual inline size_t getSize() {
 		return motifEdge->size();
 	}
 
-	vec(int)* getMotifEdge() { return motifEdge; }
-
-	//vec(int)* getMaskEdge() { return maskEdge; }
+	virtual void getMotifEdge(vec(TMotifII*)* res, vec(int)*& edgesList) { edgesList = motifEdge; }
 
 	inline int getStartT() const { return startT; }
 
@@ -434,11 +208,10 @@ public:
 
 	inline int getEndT() const { return endT; }
 
-	void setMotifEdge(vec(int)& motifEdge) {
+	virtual void setMotifEdge(vec(int)& motifEdge) {
 		if (this->motifEdge)
 			delete this->motifEdge;
 		this->motifEdge = DBG_NEW vec(int)(motifEdge);
-		//this->edgeNumber = this->motifEdge->size();
 	}
 
 	/*void setMaskEdge(vec(int)& maskEdge) {
@@ -453,10 +226,6 @@ public:
 			motifEdge->clear();
 			delete motifEdge;
 		}
-		/*if (maskEdge) {
-			maskEdge->clear();
-			delete maskEdge;
-		}*/
 	}
 
 	inline void setInterval(int startT, int endT) {
@@ -475,3 +244,205 @@ protected:
 };
 
 #pragma endregion
+
+
+/*used in precise method and GLOBALFIXNUM*/
+class CComponents {
+public:
+	vec(TEdge) edges;//cc's edges with labels
+	vec(SaveCCInfo) saveInfo;//cc's saving information in the result
+	int startT;//the starting timestamp of cc.intvl
+	int root;//the root of cc in disjoint set
+	//bool overlapFlag;//whether overlap with other components
+	//int LastNoisePos;// the condition when motif is left expandable
+	CComponents(int start, int root) :startT(start),
+		root(root)/*, overlapFlag(true)*/{}
+	CComponents() = default;
+	~CComponents() = default;
+};
+
+class CComponentsShortIntv {
+public:
+	vec(int) edges;//cc's edges with labels
+	int startT;//the starting timestamp of cc.intvl
+	int root;//the root of cc in disjoint set
+	int scopeL, scopeR;// scope[e] for each e in cc
+	bool haveNonExpand;//whether has non-expandable edges
+
+	CComponentsShortIntv(int start, int root) :startT(start),
+		root(root), haveNonExpand(false){}
+	CComponentsShortIntv() = default;
+	~CComponentsShortIntv() = default;
+
+	virtual inline void addEdge(int id) {
+		edges.emplace_back(id);
+	}
+
+	virtual void combineFrom(CComponentsShortIntv*& other) {
+		vec(int)& tempEdges = other->edges;//edges of currentCComponents
+		int size = (int)edges.size();
+		edges.resize(size + tempEdges.size());
+		copy(tempEdges.begin(), tempEdges.end(), edges.begin() + size);
+
+		if (startT < other->startT) {
+			startT = other->startT;
+		}
+		haveNonExpand |= other->haveNonExpand;
+		scopeL = max(scopeL, other->scopeL);
+		scopeR = min(scopeR, other->scopeR);
+	}
+
+	virtual void saveToResultCC(int motifStartT, int motifEndT, vec(TMotifII*)*& result, int savePos, long long& motifNumber) {
+		auto motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+		motif->copyEdges(edges);
+		motifNumber++;
+		result[savePos].emplace_back(motif);
+	}
+};
+
+class CComponentsII {
+public:
+	vec(int) edges;//cc's edges
+	int root;//the root of cc in disjoint set
+	int newInsert;//the start position of new inserted edges
+	
+	CComponentsII(int root) : root(root) {
+		newInsert = 0;
+	}
+	
+	CComponentsII() { 
+		newInsert = 0;
+	}
+	virtual inline void addEdge(int id) {
+		edges.emplace_back(id);
+	}
+	virtual void combineFrom(CComponentsII*& otherCC) = 0;
+	virtual ~CComponentsII() = default;
+
+	virtual void saveToResultCC(int motifStartT, int motifEndT, vec(TMotifII*)*& result, int savePos, long long& motifNumber) {
+		auto motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+		motif->copyEdges(edges);
+		motifNumber++;
+		result[savePos].emplace_back(motif);
+	}
+
+};
+
+
+
+/*cc set for FRTM*/
+class CComponentsFRTM : public CComponentsII {
+public:
+	CComponentsFRTM(int root) :CComponentsII(root){
+		subCCs = nullptr;
+		subCCsaved = nullptr;
+		if (Setting::delta == 0 || Setting::c == 0) {
+			noisePosQueue = nullptr;
+			preEMaxIntvlChangePos = nullptr;
+		}
+		else {
+			noisePosQueue = DBG_NEW priority_queue<pair<int, NoisePos>>();
+			preEMaxIntvlChangePos = DBG_NEW priority_queue<QueueItem>();
+		}
+	}
+	CComponentsFRTM() :CComponentsII() {
+		subCCs = nullptr;
+		subCCsaved = nullptr;
+		if (Setting::delta == 0 || Setting::c == 0) {
+			noisePosQueue = nullptr;
+			preEMaxIntvlChangePos = nullptr; 
+		}
+		else {
+			noisePosQueue = DBG_NEW priority_queue<pair<int, NoisePos>>();
+			preEMaxIntvlChangePos = DBG_NEW priority_queue<QueueItem>();
+		}
+	}
+	virtual ~CComponentsFRTM() {
+		if (subCCsaved != nullptr) delete[] subCCsaved;
+		if (subCCs != nullptr) delete[] subCCs;
+		if (Setting::delta != 0 && Setting::c != 0) {
+			delete noisePosQueue;
+			delete preEMaxIntvlChangePos;
+		}
+	}
+
+	virtual void saveToResultSubCC(int motifStartT, int motifEndT, int ccId, vec(TMotifII*)*& result, int savePos, long long& motifNumber) {
+		auto motif = DBG_NEW TMotifII(motifStartT, motifEndT);
+		//for (auto edgeIter : subCCs[ccId]) {//O(motif number)
+		//	motif->addEdge(edges[edgeIter]);
+		//}
+		motif->copyEdges(subCCs[ccId]);
+		result[savePos].emplace_back(motif);
+		motifNumber++;
+	}
+
+	virtual void combineFrom(CComponentsII*& otherCC) {
+		CComponentsFRTM* other = (CComponentsFRTM*)otherCC;
+		vec(int)& tempEdges = other->edges;//edges of currentCComponents
+		int size = (int)edges.size();
+		edges.resize(size + tempEdges.size());
+		copy(tempEdges.begin(), tempEdges.end(), edges.begin() + size);
+
+		if (Setting::delta != 0 && Setting::c != 0) {
+			while (!other->noisePosQueue->empty()) {//combine noise position
+				auto noiseEdge = other->noisePosQueue->top();
+				noisePosQueue->emplace(noiseEdge.first, NoisePos(noiseEdge.second.startTime, noiseEdge.second.pos + size));
+				other->noisePosQueue->pop();
+			}
+
+			while (!other->preEMaxIntvlChangePos->empty()) {
+				auto EMaxIntvlChangePos = other->preEMaxIntvlChangePos->top();
+				preEMaxIntvlChangePos->emplace(EMaxIntvlChangePos.startTime, EMaxIntvlChangePos.endTime, EMaxIntvlChangePos.id);
+				other->preEMaxIntvlChangePos->pop();
+			}
+		}
+
+		while (!other->maxEMaxIntvlStartTQueue.empty()) {
+			auto item = other->maxEMaxIntvlStartTQueue.top();
+			maxEMaxIntvlStartTQueue.emplace(item);
+			other->maxEMaxIntvlStartTQueue.pop();
+		}
+		minEMaxIntvlEndT = min(other->minEMaxIntvlEndT, minEMaxIntvlEndT);
+		
+		newInsert = (int)edges.size();
+		tabuTChangePos = -1;
+	}
+	
+	priority_queue<pair<int, NoisePos>>* noisePosQueue; //the position of noise on each edge, pair=<timepos,<timeEnd,edgepos>> (maximum heap, key = timepos)
+	int minEMaxIntvlEndT;
+	priority_queue<QueueItem>* preEMaxIntvlChangePos;//preMaxIntv[e] change when preMaxIntv[e][current-1].endT >= motifEndT
+
+	priority_queue<Pair, vector<Pair>, less<Pair> > maxEMaxIntvlStartTQueue; //maxEMaxIntvlStartT on each edge, pair=<maxEMaxIntvlStartT, edgeid> (maximum heap, key = maxEMaxIntvlStartT)
+	vec(int)* subCCs;//sub components
+	bool* subCCsaved;//whether subCCs need to be saved  id -> saved/not saved
+	int subCCNum;//the number of subCCs
+	int tabuTChangePos;//the position that there exists a tabu time of an edge stop at t=nextNoiseChangePos+1
+};
+
+enum ComponentsType : char {
+	CCFRTM
+};
+
+class CComponentsIIFactory {
+	
+public:
+	static CComponentsII* instance(int root, ComponentsType type) {
+		switch (type) {
+			case CCFRTM:
+				return DBG_NEW CComponentsFRTM(root);
+			default:
+				return nullptr;
+		}
+	}
+
+	static CComponentsShortIntv* instanceShortIntv(int start, int root, ComponentsType type) {
+		switch (type) {
+		case CCFRTM:
+			return DBG_NEW CComponentsShortIntv(start,root);
+		default:
+			return nullptr;
+		}
+	}
+};
+
+#pragma endregion 

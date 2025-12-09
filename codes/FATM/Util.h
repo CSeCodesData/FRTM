@@ -9,15 +9,13 @@
 #define EXIT exit(-1);
 //#define _USENSTIMER
 
-#ifdef _USENSTIMER
-	#define BEGIN_TIMER(a) auto a = std::chrono::steady_clock::now();
-	#define END_TIMER(a) std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - a).count()
-	#define OUTPUT_TIMER(a) cout<<END_TIMER(a)<<endl;
-#else
-	#define BEGIN_TIMER(a) auto a = clock();
-	#define END_TIMER(a) clock() - a
-	#define OUTPUT_TIMER(a) cout<<END_TIMER(a)<<endl;
-#endif // _USENSTIMER
+
+#define BEGIN_NSTIMER(a) auto a = std::chrono::steady_clock::now();
+#define END_NSTIMER(a) std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - a).count()
+#define OUTPUT_NSTIMER(a) cout<<END_NSTIMER(a)<<endl;
+#define BEGIN_TIMER(a) auto a = clock();
+#define END_TIMER(a) clock() - a
+#define OUTPUT_TIMER(a) cout<<END_TIMER(a)<<endl;
 
 
 #define NEWLINE cout << endl;
@@ -26,6 +24,24 @@
 #define MYINFINITE 0x3f3f3f3f
 
 #define INTV(a,b) cout<<"("<<a<<", "<<b<<") ";
+
+#define ASSERT_MSG_ALWAYS(cond, msg)                                                                                   \
+  do {                                                                                                                 \
+    if (!(cond)) {                                                                                                     \
+      std::ostringstream str;                                                                                          \
+      str << msg;                                                                                                      \
+      std::cerr << "ASSERTION FAILED: " << str.str() << '\n' << "Stack trace:\n";                                      \
+      std::abort();                                                                                                    \
+    }                                                                                                                  \
+  } while (false)
+
+#ifndef NDEBUG
+#define ASSERT_MSG(cond, msg) ASSERT_MSG_ALWAYS(cond, msg)
+#else
+#define ASSERT_MSG(cond, msg)                                                                                          \
+  do {                                                                                                                 \
+  } while (false)
+#endif  // ifndef NDEBUG
 
 using namespace std;
 class Util {
@@ -115,6 +131,7 @@ public:
 		cout << setprecision(4) << fixed<< t << " ";
 		output(rest...);
 	}
+
 };
 
 #define MYERROR(a) Util::printError(a);
@@ -123,6 +140,13 @@ public:
 #define LOAD_ERROR MYERROR("load error")
 
 #pragma region testing
+enum ModeForTest:char {
+	NOTEST = 0,
+	COMPRORI = 2,
+	OVERLAPCOUNT = 3,
+	COMPRINF = 4,
+	OVERLAPLEVEL = 5
+};
 class Test {
 public:
 	//static unordered_map<int, int> hist;
@@ -132,20 +156,21 @@ public:
 	static long long compr, gm, gne;
 	static long long ckf, gmni, gmli;
 
-	static long long gne11, gne121, gne122;
-	static long long gne211, gne2121, gne2122, gne221, gne222;
+	static long long gne11, gne12, gne121, gne122;
+	static long long gne211, gne212, gne2121, gne2122, gne221, gne222;
 	static long long gnenonoise;
 	static long long gnefield, gnemaxfield;
 
-	static int testingMode;//testing mode
+	static ModeForTest testingMode;//testing mode
 
 	static long long allContainment, containment, selectedSum;
 
-	static clock_t msTimer;
+	static clock_t startTime;
+	static bool useLimitedTime;
 	
 	static long long sumIntvLen, maxIntvLen;
 
-	static long long counter, counter2, counter3, counter4, counter5, counter6, counter7, counter8;
+	static long long counter, counter2, counter3, counter4, counter5, counter6, counter7, counter8, counter11;
 	static double counter9, counter10;
 
 	static SIZE_T peakMemory;
@@ -157,10 +182,10 @@ public:
 		GetProcessMemoryInfo(currentProcess, &pmc, sizeof(pmc));
 		if (peakMemory < pmc.WorkingSetSize) peakMemory = pmc.WorkingSetSize;
 
-		if (peakMemory / 1073741824 > 64) {
+		/*if (peakMemory / 1073741824 > 64) {
 			cout << "out of memory" << endl;
 			exit(0);
-		}
+		}*/
 	}
 
 	static void showIncMemoryUse() {

@@ -1,21 +1,21 @@
 #pragma once
 #include"stdafx.h"
 
-using NodePair = pair<int, int>;
+using NodePair = pair<uint32_t, uint32_t>;
 
 class Edge {
 public:
 	Edge() :s(-1), t(-1), id(-1) {}
 
-	Edge(int _s, int _t) :id(-1) {
-		if (_s < _t) {//ensure s < t
-			s = _s;
-			t = _t;
-		}
-		else {
-			t = _s;
-			s = _t;
-		}
+	Edge(uint32_t _s, uint32_t _t) :id(-1) {
+		//if (_s < _t) {//ensure s < t
+		s = _s;
+		t = _t;
+		//}
+		//else {
+		//	t = _s;
+		//	s = _t;
+		//}
 	}
 
 	Edge(const Edge& e)
@@ -23,11 +23,6 @@ public:
 
 	bool operator<(const Edge& edge1) const {
 		return s < edge1.s || (s == edge1.s && t < edge1.t);
-	}
-
-	bool operator==(const Edge& edge1) const {
-		return (s == edge1.s && t == edge1.t) ||
-			(s == edge1.t&&t == edge1.s);
 	}
 
 	bool operator!=(const Edge& edge1) const {
@@ -41,9 +36,18 @@ public:
 		return output;
 	}
 
+	bool operator==(const Edge& edge1) const {
+		return (s == edge1.s && t == edge1.t) ||
+			(s == edge1.t && t == edge1.s);
+	}
 
-	int s, t;//two endpoints, ensure s < t
-	int id;//id of an edge
+	template <class H>
+	friend H AbslHashValue(H h, const Edge& k) {
+		return H::combine(move(h), k.s, k.t);
+	}
+
+	uint32_t s, t;//two endpoints, ensure s < t
+	uint32_t id;//id of an edge
 };
 
 

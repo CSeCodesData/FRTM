@@ -5,7 +5,7 @@ void FindTMotif::FRTMExact(TGraph*& graph, vec(TMotifI*)*& result, bool*& fixLab
 	int nEdge = graph->getNEdge();
 
 #pragma region initialize
-	int maxIntervalLength = graph->getMaxIntervalLength();
+	//int maxIntervalLength = graph->getMaxIntervalLength();
 
 	i2iHMap vertex2Pos;//map the vertex's id to the position in disjoint set
 	/*map the root in disjoint set to the position of its corresponding
@@ -13,8 +13,8 @@ void FindTMotif::FRTMExact(TGraph*& graph, vec(TMotifI*)*& result, bool*& fixLab
 	i2iHMap root2Comp;
 
 	vec(CComponents*) tempComponents;//temporary component list CC
-	SAVEINFO_Vec* edgeSetsR = DBG_NEW SAVEINFO_Vec[maxIntervalLength];// R edge sets
-	DynamicConnectivity* disjointSet;//disjoint set
+	SAVEINFO_Vec* edgeSetsR = DBG_NEW SAVEINFO_Vec[graph->getAllNTimestamp()];// R edge sets
+	DisjointSet* disjointSet;//disjoint set
 
 	SAVEINFO_VIter iterEnd, iterStart;//iterator for edgeSetsR
 	veciter(CComponents*) listEnd;//iterator for tempComponents
@@ -55,14 +55,14 @@ void FindTMotif::FRTMExact(TGraph*& graph, vec(TMotifI*)*& result, bool*& fixLab
 		Test::compr += clock() - begin;
 
 		//Test S(m,T)
-		if (maxIntervalLength <= choiceEndT - Te) smt = 0;
-		else smt = edgeSetsR[choiceEndT - Te].size();
-		maxSmt = max(maxSmt, smt);
-		allSmt += smt;
+		//if (maxIntervalLength <= choiceEndT - Te) smt = 0;
+		//else smt = edgeSetsR[choiceEndT - Te].size();
+		//maxSmt = max(maxSmt, smt);
+		//allSmt += smt;
 
 		//R2L
 		for (int tempT = choiceEndT - Te; tempT >= 0; tempT--, edgeEndT--) {
-			if (tempT >= maxIntervalLength) continue;
+			//if (tempT >= maxIntervalLength) continue;
 			iterStart = edgeSetsR[tempT].begin();
 			iterEnd = edgeSetsR[tempT].end();
 			if (iterStart == iterEnd) continue;

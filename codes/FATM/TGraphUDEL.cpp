@@ -36,12 +36,17 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 	numOfLabel = 0;
 	this->edgeList = DBG_NEW NodePair[this->nEdge];
 	
-	edge2ind = DBG_NEW set<Edge>();
+	edge2ind = DBG_NEW absl::flat_hash_set<Edge>();
 	vec(int) u_arr, v_arr, t_arr, w_arr;//allocate the memory
 	u_arr.reserve(ALLOC_MEM);
 	v_arr.reserve(ALLOC_MEM);
 	t_arr.reserve(ALLOC_MEM);
 	w_arr.reserve(ALLOC_MEM);
+	ind2node = DBG_NEW int[nNode];
+	int nodeId = 0,uid,vid;
+	//int* nodesDegree = DBG_NEW int[nNode];
+	//CLEARALL(nodesDegree, 0, nNode, int);
+	//int maxDegree = 0;
 	int filterT = fixedE > 0 ? fixedE : allNTimestamp - 1;
 	try {
 		while (fgets(line, LINE_LENGTH, file)) {
@@ -53,25 +58,42 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 			v = STR2INT(line + sep1 + 1);
 			t = STR2INT(line + sep2 + 1);
 			w = STR2INT(line + sep3 + 1);
-			if (labelToId.find(w) == labelToId.end()) {
-				labelToId[w] = numOfLabel++;
-			}
+			
 			if (flagT == -1) flagT = t;
 
-			Edge e(u, v);
 			if (flagT == t) {//save static graph structure
 				//edgeSet->insert(e1);
-				set<Edge>::iterator e2IdIter = edge2ind->find(e);
-				if (e2IdIter == edge2ind->end()) {
+				if (node2ind.find(u) == node2ind.end()) {
+					uid = nodeId++;
+					ind2node[uid] = u;
+					node2ind[u] = uid;
+				}
+				else uid = node2ind[u];
+				if (node2ind.find(v) == node2ind.end()) {
+					vid = nodeId++;
+					ind2node[vid] = v;
+					node2ind[v] = vid;
+				}
+				else vid = node2ind[v];
+
+				
+				Edge e(uid, vid);
+				if (edge2ind->find(e) == edge2ind->end()) {
 					e.id = ind;
 					edgeList[ind] = NodePair(e.s, e.t);
 					++ind;
 					edge2ind->emplace(e);//save the edge of graph
 				}
 				else continue;//multiple edges
-
+				
+				/*nodesDegree[uid]++;
+				maxDegree = max(maxDegree, nodesDegree[uid]);
+				nodesDegree[vid]++;
+				maxDegree = max(maxDegree, nodesDegree[vid]);*/
 			}
-			
+			if (labelToId.find(w) == labelToId.end()) {
+				labelToId[w] = numOfLabel++;
+			}
 			if (t <= filterT) {
 				w = labelToId[w];
 				u_arr.emplace_back(u);
@@ -102,7 +124,8 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		v = v_arr[i];
 		t = t_arr[i];
 		w = w_arr[i];
-		Edge e(u, v);
+		Edge e(node2ind[u], node2ind[v]);
+		//Edge e(u,v);
 		int edgeInd = edge2ind->find(e)->id;
 		timestampPosForEL = t * nEdge + edgeInd;
 		if (lab[timestampPosForEL] == 0x7fffffff) {
@@ -139,6 +162,7 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		}
 		intvS = 0;
 		while (intvS < currNTimestamp) {
+			
 			int lab = getEdgeLabel(id, intvS);
 			intvE = intvS + aft[intvS*nEdge + id] - 1;
 			if (tail[posForELabel + lab] == -1) {//first timestamp for label
@@ -169,7 +193,7 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 	}
 	createStructForDefType();
 	createCommonStruct();
-	
+
 	delete[] tempLabelsNum;
 	
 #ifdef _USENSTIMER
@@ -196,7 +220,7 @@ void TGraphUDEL::loadInfomation(const char* src, int fixedE, int k) {
 		maxIntvNum = max(maxIntvNum, eachIntvNum);
 	}
 	cout << "maximum interval number: " << maxIntvNum << ", average interval number: " << intvNum * 1.0 / nEdge << endl;
-	//cout<< all / nEdge << endl;
+	//cout<< "maximum degree: " << maxDegree << endl;
 }
 
 void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
@@ -251,7 +275,7 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 		v = v_arr[i];
 		t = t_arr[i];
 		w = w_arr[i];
-		Edge e(u, v);
+		Edge e(node2ind[u], node2ind[v]);
 		int edgeInd = edge2ind->find(e)->id;
 		int timestampPosForEL = t * nEdge + edgeInd;
 		if (lab[timestampPosForEL] == 0x7fffffff) {
@@ -273,16 +297,16 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 		intvE = currNTimestamp - 1;
 		while (intvE > fixedE) { //update positive value of aft_t for t in [T+1,T+delta T]
 			intvS = intvE - bef[intvE*nEdge + id] + 1;
-			/*for (int intvP = intvS; intvP <= intvE; intvP++) {
-				aft[intvP*nEdge + id] = intvE - intvP + 1;
-			}*/
-			for (int intvP = fixedE + 1; intvP <= intvE; intvP++) {
-				aft[intvP*nEdge + id] = intvE - intvP + 1;
-				//if(id == 1)cout << intvP << " " << aft[intvP*nEdge + id] << endl;
-			}
 			if (intvS <= fixedE) { //at most |L| times
-				aft[intvS*nEdge + id] = intvE - intvS + 1; 
-				//if (id == 1)cout << intvS << " " << aft[intvS*nEdge + id] << endl;
+				aft[intvS * nEdge + id] = intvE - intvS + 1;
+				for (int intvP = fixedE + 1; intvP <= intvE; intvP++) {
+					aft[intvP * nEdge + id] = intvE - intvP + 1;
+				}
+			}
+			else {
+				for (int intvP = intvS; intvP <= intvE; intvP++) {
+					aft[intvP * nEdge + id] = intvE - intvP + 1;
+				}
 			}
 			intvE = intvS - 1;
 		}
@@ -304,13 +328,11 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 					bef[intvS*nEdge + id] = -MYINFINITE;
 				}
 				else {
-					//if (id == 1)cout << tail[posForELabel + lab] << " ! " << tail[posForELabel + lab] - intvS << endl;
 					bef[intvS*nEdge + id] = aft[tail[posForELabel + lab] * nEdge + id] = tail[posForELabel + lab] - intvS;
 				}
 			}
 			tail[posForELabel + lab] = intvE;
 			aft[intvE * nEdge + id] = -MYINFINITE;
-			//if (id == 1)cout << intvE << " @ " << -MYINFINITE << endl;
 			intvS = intvE + 1;
 		}
 
@@ -329,6 +351,7 @@ void TGraphUDEL::updateDS(const char* src, int fixedE, int newFixedE) {
 #else
 	cout << "updatetime: " << END_TIMER(a) << "ms" << endl;
 #endif // _USENSTIMER
+	//exit(0);
 }
 
 /*compRES for exact label matches*/

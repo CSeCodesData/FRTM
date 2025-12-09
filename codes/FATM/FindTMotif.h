@@ -2,7 +2,6 @@
 #include "stdafx.h"
 #include "TGraph.h"
 #include "TMotif.h"
-#include "DynamicConnectivity.h"
 #include "LinkedList.h"
 #include "Util.h"
 #include "DisjointSet.h"
@@ -29,9 +28,13 @@ public:
 		return a->getMotifEdge()->begin()->id < b->getMotifEdge()->begin()->id;
 	}
 	static bool cmp2(TMotifII*& a, TMotifII*& b) {
-		sort(a->getMotifEdge()->begin(), a->getMotifEdge()->end());
-		sort(b->getMotifEdge()->begin(), b->getMotifEdge()->end());
-		return *(a->getMotifEdge()->begin()) < *(b->getMotifEdge()->begin());
+		vec(int)* ea, *eb;
+		a->getMotifEdge(nullptr, ea);
+		b->getMotifEdge(nullptr, eb);
+		sort(ea->begin(), ea->end());
+		sort(eb->begin(), eb->end());
+		return *(ea->begin()) < *(eb->begin());
+		//return a->getSize() < b->getSize();
 	}
 
 	/*print the list of motifs*/
@@ -93,7 +96,7 @@ public:
 			listEnd = lis.end();
 		int i = 1;
 		TMotifII* motif;
-		int motifStartT, motifEndT, intvLen;
+		int motifStartT = -1, motifEndT = -1, intvLen;
 		int size;
 		if (listIter != listEnd) {
 			motifStartT = (*listIter)->getStartT();
@@ -116,6 +119,7 @@ public:
 					cout << "startT: " << motifStartT
 						<< "\tendT: " << motifEndT << endl;
 				}
+				
 				if (output >= 3) {
 					temporal_graph->printMotif2(motif, i/*, fixednode1, fixednode2*/);
 					i++;
@@ -133,7 +137,6 @@ public:
 		if (output != 0) cout << "\n";
 	}
 	
-
 	#pragma endregion
 
 	static int k;//frequency condition
@@ -151,7 +154,7 @@ public:
 	//static int filterIntvSize;//output motifs with interval length > filterIntvSize, default filterIntvSize = 0
 	//static int filterEdgeNumber;//output motifs with edge number > filterIntvSize, default filterEdgeNumber = 0
 	//static int* edgeBef;
-	//static int fixednode1, fixednode2;//output motifs with a specific edge
+	//static int outputStartTime, outputStartTimeEnd;//output motifs with specific startTimes
 };
 
 

@@ -31,35 +31,40 @@ void TGraph::createStructForDefType() {
 	int size = nEdge * allNTimestamp;
 
 	//method2
-	scope = DBG_NEW pair<int, int>[nEdge];
+	scope = DBG_NEW NVIntv[nEdge];
 
 	int eLabelSize = nEdge * numOfLabel;
 	scanT = DBG_NEW int[eLabelSize];
 	CLEARALL(scanT, 0, eLabelSize, int);
 
 	vioT = DBG_NEW ForbidPairList[eLabelSize];
-
+	
 	CircularQueue<NVIntv>::queueSize = numOfLabel * (int)(ceil(Setting::delta*currNTimestamp) + 0.5);
-	if (Setting::choice == AlgorithmType::FRTMPLUS || Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
-		maxIntvShortIntv = DBG_NEW pair<int, int>[nEdge];
+	switch (Setting::choice) {
+	case AlgorithmType::FRTMPLUS:
+	case AlgorithmType::DFRTMPLUS:
+	case AlgorithmType::FRTMPLUSDYN:
+		maxIntvShortIntv = DBG_NEW NVIntv[nEdge];
 		for (int j = 0; j < nEdge; j++) {
 			maxIntvShortIntv[j].first = -1;
 			maxIntvShortIntv[j].second = -1;
 			scope[j].first = -1;
 			scope[j].second = -1;
 		}
+		break;
+	default:
+		break;
 	}
 
 	preMaxIntv = DBG_NEW CircularQueue<NVIntv>[nEdge];
 
-	/*if (allNTimestamp > nEdge) {
-		edgeBef = DBG_NEW pair<int, int>[size];
-		CLEARALL(edgeBef, -1, size << 1, int);
-	}*/
-
-	if (Setting::choice == AlgorithmType::DFRTM || Setting::choice == AlgorithmType::FRTMFORDYN
-		|| Setting::choice == AlgorithmType::DFRTMOPT1 || Setting::choice == AlgorithmType::FRTMOPT1DYN
-		|| Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
+	switch (Setting::choice){
+	case AlgorithmType::DFRTM:
+	case AlgorithmType::FRTMFORDYN:
+	case AlgorithmType::DFRTMOPT1:
+	case AlgorithmType::FRTMOPT1DYN:
+	case AlgorithmType::DFRTMPLUS:
+	case AlgorithmType::FRTMPLUSDYN:
 		newMIntR = DBG_NEW vec(MotifPos);
 		newEIntR = DBG_NEW vec(MidResult*);
 		newPosInEIntR = DBG_NEW int[eLabelSize];
@@ -68,6 +73,9 @@ void TGraph::createStructForDefType() {
 		edgesFetched = DBG_NEW bool[nEdge];
 		CLEARALL(edgesFetched, false, nEdge, bool);
 		edgesInEIntR = DBG_NEW vec(int)();
+		break;
+	default:
+		break;
 	}
 }
 
@@ -77,17 +85,26 @@ void TGraph::releaseStructForDefType() {
 	delete[] preMaxIntv;
 	delete[] scanT;
 	delete[] vioT;
-	/*if (allNTimestamp > nEdge) {
-		delete[] edgeBef;
-	}*/
 
-	if (Setting::choice == AlgorithmType::FRTMPLUS|| Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
+	//FRTMPLUS
+	switch (Setting::choice) {
+	case AlgorithmType::FRTMPLUS:
+	case AlgorithmType::DFRTMPLUS:
+	case AlgorithmType::FRTMPLUSDYN:
 		delete[] maxIntvShortIntv;
+		break;
+	default:
+		break;
 	}
 
-	if (Setting::choice == AlgorithmType::DFRTM || Setting::choice == AlgorithmType::FRTMFORDYN
-		|| Setting::choice == AlgorithmType::DFRTMOPT1 || Setting::choice == AlgorithmType::FRTMOPT1DYN
-		|| Setting::choice == AlgorithmType::DFRTMPLUS || Setting::choice == AlgorithmType::FRTMPLUSDYN) {
+	//dynamic
+	switch (Setting::choice) {
+	case AlgorithmType::DFRTM:
+	case AlgorithmType::FRTMFORDYN:
+	case AlgorithmType::DFRTMOPT1:
+	case AlgorithmType::FRTMOPT1DYN:
+	case AlgorithmType::DFRTMPLUS:
+	case AlgorithmType::FRTMPLUSDYN:
 		if (posInEIntR != nullptr) {
 			delete[] posInEIntR;
 		}
@@ -105,11 +122,14 @@ void TGraph::releaseStructForDefType() {
 
 		delete[] edgesFetched;
 		delete edgesInEIntR;
+		break;
+	default:
+		break;
 	}
 }
 
 void TGraph::createCommonStruct() {
-	maxIntv = DBG_NEW pair<int, int>[nEdge];
+	maxIntv = DBG_NEW NVIntv[nEdge];
 	for (int j = 0; j < nEdge; j++) {
 		maxIntv[j].first = -1;
 		maxIntv[j].second = -1;
@@ -119,7 +139,6 @@ void TGraph::createCommonStruct() {
 void TGraph::releaseCommonStruct() {
 	delete[] maxIntv;
 }
-
 
 
 void TGraph::resetStruct() {
@@ -145,7 +164,7 @@ void TGraph::resetStruct() {
 
 /*generate motifs in one interval for FRTMExact*/
 void TGraph::genMotifInOneIntv(SAVEINFO_VIter& iterStart, SAVEINFO_VIter& iterEnd,
-	i2iHMap& vertex2Pos, DynamicConnectivity*& connectivity, int& vertexNum,
+	i2iHMap& vertex2Pos, DisjointSet*& connectivity, int& vertexNum,
 	vec(int)& combineCCPos, /*int& realMotifNum,*/
 	i2iHMap& root2Comp, vec(CComponents*)& tempComponents,
 	vec(int)& saveCCPos, int motifStartT, int motifEndT,
@@ -181,7 +200,7 @@ void TGraph::genMotifInOneIntv(SAVEINFO_VIter& iterStart, SAVEINFO_VIter& iterEn
 
 /*fetch new edges from one R edge set and insert into the structure which maintains connectivity*/
 void TGraph::maintainConnectivity(SAVEINFO_VIter& infoBegin,
-	SAVEINFO_VIter& infoEnd, i2iHMap& vertex2Pos, DynamicConnectivity*& connectivity, int&vertexNum,
+	SAVEINFO_VIter& infoEnd, i2iHMap& vertex2Pos, DisjointSet*& connectivity, int&vertexNum,
 	vec(int)& combineCCPos) {
 	NodePair* temp;
 	int motifPos;
@@ -208,7 +227,7 @@ void TGraph::maintainConnectivity(SAVEINFO_VIter& infoBegin,
 		//if (sId < tId) motifPos = connectivity->addE(iter->edgeId, sId, tId);
 		//else motifPos = connectivity->addE(iter->edgeId, tId, sId);
 		
-		motifPos = connectivity->addE(iter->edgeId, sId, tId);
+		motifPos = connectivity->addE(sId, tId);
 		//Util::output(motifPos, sId, tId);
 		//cout << endl;
 
@@ -241,7 +260,7 @@ inline void TGraph::combineCC(CComponents*& origin, CComponents*& now) {
 
 /*combine ccs*/
 void TGraph::combineComponents(vec(CComponents*)& tempComponents,
-	i2iHMap& vertex2Pos, DynamicConnectivity*& connectivity,
+	i2iHMap& vertex2Pos, DisjointSet*& connectivity,
 	i2iHMap& root2Comp, vec(int)& combineCCPos) {
 #pragma region initialize
 	int oldRoot, newRoot;//the original/current root in disjoint set
@@ -283,7 +302,7 @@ void TGraph::combineComponents(vec(CComponents*)& tempComponents,
 void TGraph::updateNewEdgeInfo(
 	SAVEINFO_VIter& infoBegin, SAVEINFO_VIter& infoEnd,
 	vec(CComponents*)& tempComponents,
-	i2iHMap& vertex2Pos, DynamicConnectivity*& connectivity,
+	i2iHMap& vertex2Pos, DisjointSet*& connectivity,
 	i2iHMap& root2Comp, vec(int)& saveCCPos, int startTime, int endTime) {
 
 #pragma region initialize
@@ -391,13 +410,6 @@ void TGraph::expCheck(vec(int)&saveCCPos,
 
 
 void TGraph::updateMidResult() {
-	/*auto it = newValidMidResult.begin();
-	for (auto be = newEIntR->begin(); be != newEIntR->end(); be++,it++) {
-		if(*it)
-		cout << (*be)->row << " " << (*be)->edgeId << endl;
-	}
-	exit(0);*/
-	
 	if (posInEIntR != nullptr) {
 		delete[] posInEIntR;
 	}
@@ -426,7 +438,7 @@ void TGraph::updateMidResult() {
 }
 
 void TGraph::showMidResult(vec(TMotifII*)*& result) {
-	int edgeN = 0;
+	size_t edgeN = 0;
 	unordered_set<int> s;
 	for (auto item : *EIntR) {
 		if (s.find(item->edgeId) == s.end()) {
@@ -443,28 +455,45 @@ void TGraph::showMidResult(vec(TMotifII*)*& result) {
 	//exit(0);
 }
 
+void TGraph::printMotifEdges(vec(int)*& edgesList, vec(int)* removed, int motifStartT) {
+	if (removed != nullptr) {
+		
+		sort(removed->begin(), removed->end());
+		sort(edgesList->begin(), edgesList->end());
+		auto edgeEnd = edgesList->end();
+		auto removeEdgeEnd = removed->end();
+		auto removeEdgeIter = removed->begin();
+		for (auto edgeIter = edgesList->begin(); edgeIter != edgeEnd; edgeIter++) {
+			if (removeEdgeIter != removeEdgeEnd && *edgeIter == *removeEdgeIter) {
+				removeEdgeIter++;
+			}
+			else {
+				auto edge = &edgeList[*edgeIter];
+				cout << ind2node[edge->first] << "," << ind2node[edge->second] <<
+					"," << idToLabel[getEdgeLabel(*edgeIter, motifStartT)] << endl;
+			}
+		}
+	}
+	else {
+		auto edgeEnd = edgesList->end();
+		sort(edgesList->begin(), edgesList->end());
+		for (auto edgeIter = edgesList->begin(); edgeIter != edgeEnd; edgeIter++) {
+			auto edge = &edgeList[*edgeIter];
+			cout << ind2node[edge->first] << "," << ind2node[edge->second] <<
+				"," << idToLabel[getEdgeLabel(*edgeIter, motifStartT)] << endl;
+		}
+	}
+}
 
 /*print motif*/
 void TGraph::printMotif(TMotifII*& motif, int motifId, int node1, int node2) {
-	vec(int)* motifEdge = motif->getMotifEdge();
+	vec(int)* motifEdge;
+	motif->getMotifEdge(nullptr, motifEdge);
 	veciter(int) listEnd = motifEdge->end();
-	sort(motifEdge->begin(), listEnd);
 	if (node1 == -1 || node2 == -1) {
 		cout << MOTIF_ID << motifId << endl;
 		cout << EDGE_NUM << motif->getSize() << endl;
-		//vec(int)* maskEdge = motif->getMaskEdge();
-
-		NodePair *edge;
-		//bool finded;
-		for (auto iter = motifEdge->begin();
-			iter != listEnd; ++iter) {
-			//finded = Util::findItem(maskEdge, iter->id);
-			//if (!finded) {
-			edge = &edgeList[*iter];
-			cout << edge->first << "," << edge->second <<
-				"," << idToLabel[getEdgeLabel(*iter, motif->getStartT())] << endl;
-			//}
-		}
+		printMotifEdges(motifEdge, nullptr, motif->getStartT());
 	}
 	else {
 		bool output = false;
@@ -472,7 +501,7 @@ void TGraph::printMotif(TMotifII*& motif, int motifId, int node1, int node2) {
 		for (auto iter = motifEdge->begin();
 			iter != listEnd; ++iter) {
 			edge = &edgeList[*iter];
-			if ((edge->first == node1 && edge->second == node2) || (edge->first == node2 && edge->second == node1)) {
+			if ((ind2node[edge->first] == node1 && ind2node[edge->second] == node2) || (ind2node[edge->first] == node2 && ind2node[edge->second] == node1)) {
 				output = true;
 				break;
 			}
@@ -481,29 +510,22 @@ void TGraph::printMotif(TMotifII*& motif, int motifId, int node1, int node2) {
 			cout << "***************************************" << endl;
 			cout << MOTIF_ID << motifId << endl;
 			cout << EDGE_NUM << motif->getSize() << endl;
-			for (auto iter = motifEdge->begin();
-				iter != listEnd; ++iter) {
-				edge = &edgeList[*iter];
-				cout << edge->first << "," << edge->second <<
-					"," << idToLabel[getEdgeLabel(*iter, motif->getStartT())] << endl;
-			}
+			printMotifEdges(motifEdge, nullptr, motif->getStartT()); 
 			cout << "***************************************" << endl;
 		}
 	}
 }
 
+// for less output memory
 void TGraph::printMotif2(TMotifII*& motif, int motifId) {
-	vec(int)* motifEdge = motif->getMotifEdge();
-	veciter(int) listEnd = motifEdge->end();
-	sort(motifEdge->begin(), listEnd);
-	cout << MOTIF_ID << motifId << endl;
-	cout << EDGE_NUM << motif->getSize() << endl;
-	//vec(int)* maskEdge = motif->getMaskEdge();
-
-	NodePair *edge;
-	//bool finded;
-	for (auto iter = motifEdge->begin();
-		iter != listEnd; ++iter) {
-		cout << *iter << "," << idToLabel[getEdgeLabel(*iter, motif->getStartT())] << endl;
+	vec(int)* motifEdge;
+	motif->getMotifEdge(nullptr, motifEdge);
+	cout << "N" << motifId << endl;
+	cout << "E" << motif->getSize() << endl;
+	auto edgeEnd = motifEdge->end();
+	sort(motifEdge->begin(), motifEdge->end());
+	for (auto edgeIter = motifEdge->begin(); edgeIter != edgeEnd; edgeIter++) {
+		cout << *edgeIter <<",";
 	}
+	cout << endl;
 }

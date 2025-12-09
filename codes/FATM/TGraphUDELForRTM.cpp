@@ -62,7 +62,6 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 		mainLabelPos = labelPosForEdge + mainLabel;
 		int checkE = scanT[mainLabelPos];//scan at the previous row
 		if (checkE == choiceEndT) {
-			int localNoise = 0;
 			pos = checkE * nEdge + i;
 			if (lab[pos] != mainLabel) {
 				int localNoise = 0;
@@ -108,7 +107,7 @@ void TGraphUDEL::edgeFilterShortIntvMidR(int intvB, int intvE, int limited, int 
 			lazyUpdate(currentPos, pos, i);//update aft
 			int nextLabPos = min(currentPos + max(aft[pos], 1) - 1, endT - startT) + 1;
 			int localNoise;
-			int labelsSum = 0, noiseNum = 0, forbidTimeStartT;
+			int labelsSum = 0, noiseNum = 0, forbidTimeStartT = -1;
 			while (currentPos < currNTimestamp) {
 				int intvL = nextLabPos - currentPos;
 				edgeType = lab[pos];
@@ -240,7 +239,6 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 		//dynamic
 		int checkE = scanT[mainLabelPos];//scan at the previous row
 		if (checkE == endT) {
-			int localNoise = 0;
 			pos = checkE * nEdge + i;
 			if (lab[pos] != mainLabel) {
 				int localNoise = 0;
@@ -280,7 +278,7 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];
 		/*not exists the maximum interval containing [intvB,intvE]*/
 		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) < intvLen) {
-			if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;
+			if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;
 			continue;
 		}
 		intvStart = intvE - max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) + 1;
@@ -295,7 +293,7 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 			}
 		}
 		else if (maxIntvShortIntv[i].second >= intvB - startT && maxIntvShortIntv[i].first <= timePos) {//case 3
-			if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;
+			if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;
 			continue;
 		}
 		else {//case 1 and 2
@@ -311,143 +309,440 @@ void TGraphUDEL::edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited
 
 				posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R for edge i is changed
 			}
-			else if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R for edge i is unchanged 
+			else if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R for edge i is unchanged 
 		}
 	}
 }
 #pragma endregion
 
-#pragma region FRTM
+void TGraphUDEL::removeNonOverlapPreEMaxIntv(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT) {
+	for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
+		temp++) {
+		auto& intv = preEMaxIntvlPtr.q[temp];
+		if (intv.second < checkT) {//no overlap
+			preEMaxIntvlPtr.swapToTop(temp);
+			preEMaxIntvlPtr.pop();
+		}
+	}
+}
+
+void TGraphUDEL::removeNonOverlapPreEMaxIntvWithMem(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT, int edgeId, int timestampPosForEMaxIntvlEndT, int& preMaxEMaxIntvlEndT/*, int& preMaxEMaxIntvlStartT*/) {
+	for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
+		auto& intv = preEMaxIntvlPtr.q[temp];
+		if (intv.second < checkT) {//no overlap
+			preEMaxIntvlPtr.swapToTop(temp);
+			preEMaxIntvlPtr.pop();
+		}
+		else {
+			int tempTimestampPos = (intv.second - startT)*nEdge + edgeId;
+			if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+				preMaxEMaxIntvlEndT = intv.second;
+				//preMaxEMaxIntvlStartT = intv.first;
+			}
+		}
+	}
+}
+
+void TGraphUDEL::removeNonOverlapPreEMaxIntvWithMem(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT, int edgeId, int mainLabel, int timestampPosForEMaxIntvlEndT, int& preMaxEMaxIntvlEndT/*, int& preMaxEMaxIntvlStartT*/, int& maxEMaxIntvlEndT, int& maxEMaxIntvlStartT) {
+	for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
+		auto& intv = preEMaxIntvlPtr.q[temp];
+		if (intv.second < checkT) {//no overlap
+			preEMaxIntvlPtr.swapToTop(temp);
+			preEMaxIntvlPtr.pop();
+		}
+		else {
+			int tempTimestampPos = (intv.second - startT)*nEdge + edgeId;
+			if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
+				maxEMaxIntvlEndT = intv.second;
+				maxEMaxIntvlStartT = intv.first;
+			}
+			if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
+				preMaxEMaxIntvlEndT = intv.second;
+				//preMaxEMaxIntvlStartT = intv.first;
+			}
+		}
+	}
+}
+
+template<class T>
+void TGraphUDEL::saveToEdgeSetsR(int savePos, int edgeId,  vec(T)*& edgeSetsR, ForbidPairList* noiseRecord, int& selectedNum, int& rightEndpoint) {
+	selectedNum++;
+	if (rightEndpoint < savePos) rightEndpoint = savePos;
+	//edgeSetsR[savePos].emplace_back(T);
+	noiseRecord->insertToSetR(edgeId,edgeSetsR[savePos]);
+}
+
+void TGraphUDEL::saveToMidResult(int lastMainLabelPos, int edgeId, int localNoise, int mainLabelPos, int intvB, ForbidPairList& now) {
+	int checkPos = lastMainLabelPos *nEdge + edgeId;
+	lazyUpdate(lastMainLabelPos, checkPos, edgeId);//update aft
+	int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
+	if (localNoise <= Setting::c) {
+		checkPos = labelEnd * nEdge + edgeId;
+		lazyUpdate(labelEnd, checkPos, edgeId);//update aft
+		if (aft[checkPos] != -MYINFINITE) {
+			if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+				newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
+				MidResult* rd4 = DBG_NEW MidResult(intvB, edgeId, maxIntv[edgeId], preMaxIntv[edgeId], scanT[mainLabelPos], now);
+				newEIntR->emplace_back(rd4);
+				newValidMidResult.emplace_back(true);
+			}
+		}
+		else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
+			newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
+			MidResult* rd4 = DBG_NEW MidResult(intvB, edgeId, maxIntv[edgeId], preMaxIntv[edgeId], scanT[mainLabelPos], now);
+			newEIntR->emplace_back(rd4);
+			newValidMidResult.emplace_back(true);
+		}
+	}
+	else {
+		if (newPosInEIntR[mainLabelPos] >= 0) {
+			newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
+			newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
+		}
+	}
+}
+
+void TGraphUDEL::getCurrentNoise(int currentPos, int mainLabel, int eid, int& localNoise, int& noiseNum) {
+	int timestampPosForEL = currentPos * nEdge + eid;
+	int edgeType = lab[timestampPosForEL];
+	if (edgeType != mainLabel) {
+		int eLvalue = max(bef[timestampPosForEL], 1);
+		int tempTPos = timestampPosForEL - eLvalue * nEdge;
+		int tempPosForLabels = currentPos - eLvalue;
+		localNoise = eLvalue;
+		while (lab[tempTPos] != mainLabel) {
+			eLvalue = max(bef[tempTPos], 1);
+			tempPosForLabels -= eLvalue;
+			localNoise += eLvalue;
+			tempTPos -= eLvalue * nEdge;
+		}
+		noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + eid] + localNoise;
+	}
+	else {
+		localNoise = 0;
+		noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + eid];
+	}
+}
+
+void TGraphUDEL::updateVioT(int intvB, ForbidPairList& now, ForbidPairNode*& forbidIntv, int mainLabel,
+	int eid, bool dynamicMode, int& localNoise, int& noiseNum) {
+	int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
+	int tempPos = tempT - startT;
+	int tempTimestampPosForEL = tempPos * nEdge + eid;
+
+	//get noiseNum, localNoise
+	if (lab[tempTimestampPosForEL] != mainLabel) {
+		int eLvalue = max(bef[tempTimestampPosForEL], 1);
+		int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
+		int tempPosForLabels = tempPos - eLvalue;
+		localNoise = eLvalue - 1; //end at (tempT - 1)
+		while (lab[tempTPos] != mainLabel) {
+			eLvalue = max(bef[tempTPos], 1);
+			tempPosForLabels -= eLvalue;
+			localNoise += eLvalue;
+			tempTPos -= eLvalue * nEdge;
+		}
+		noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + eid] + localNoise;
+	}
+	else {
+		localNoise = 0;
+		noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + eid];
+	}
+
+	int labelsSum = tempT - intvB;
+	auto tempIntv = forbidIntv;
+	while (forbidIntv != nullptr) {
+
+		int forbidTimeStartT = -1;
+		if (dynamicMode) lazyUpdate(tempT, tempTimestampPosForEL, eid);//update aft
+		int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+		while (tempT <= stopT) {
+
+			auto intvLen = nextLabT - tempT;
+			auto edgeType = lab[tempTimestampPosForEL];
+			if (edgeType == mainLabel) {
+				localNoise = 0;
+				double minNoise = Setting::delta * (labelsSum + 1);
+				if (LESSEQ(noiseNum, minNoise)) {
+					if (forbidTimeStartT != -1) {
+						now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
+						forbidTimeStartT = -1;
+						tempIntv = tempIntv->next;
+					}
+				}
+				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
+					if (forbidTimeStartT == -1) {
+						forbidTimeStartT = tempT + startT;
+					}
+				}
+				else {
+					double checkNum = (noiseNum - minNoise) / Setting::delta;
+					int noiseT;
+					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
+					else noiseT = (int)checkNum + tempT;
+					if (forbidTimeStartT == -1) {
+						now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
+						tempIntv = tempIntv->next;
+					}
+					else {
+						now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
+						tempIntv = tempIntv->next;
+						forbidTimeStartT = -1;
+					}
+				}
+			}
+			else {
+				if (forbidTimeStartT == -1) {
+					forbidTimeStartT = tempT + startT;
+				}
+				localNoise += intvLen;
+				noiseNum += intvLen;
+			}
+			labelsSum += intvLen;
+
+			tempT = nextLabT;
+			tempTimestampPosForEL = (tempT - startT) * nEdge + eid;
+			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
+				if (tempT <= stopT) {
+					if (dynamicMode) lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, eid);//update aft
+					nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
+				}
+			}
+			else {
+				if (tempT <= stopT) {
+					if (dynamicMode) lazyUpdate(tempT, tempTimestampPosForEL, eid);//update aft
+					nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
+				}
+			}
+		}
+		if (forbidTimeStartT != -1) {
+			if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
+				now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
+				tempIntv = tempIntv->next;
+
+				forbidIntv = forbidIntv->pre;
+				tempIntv = tempIntv->next;
+				if (forbidIntv == nullptr) {
+					now.deleteFirstNode();
+				}
+				else now.deleteNextNode(forbidIntv);
+				forbidIntv = tempIntv;
+			}
+			else {
+				tempIntv = forbidIntv = forbidIntv->next;
+			}
+		}
+		else {
+			forbidIntv = forbidIntv->pre;
+			tempIntv = tempIntv->next;
+			if (forbidIntv == nullptr) {
+				now.deleteFirstNode();
+			}
+			else now.deleteNextNode(forbidIntv);
+			forbidIntv = tempIntv;
+		}
+
+		if (forbidIntv != nullptr) {
+			tempT = forbidIntv->item.first;
+			tempTimestampPosForEL = (tempT - startT) * nEdge + eid;
+			labelsSum = tempT - intvB;
+			localNoise = 0;
+			stopT = forbidIntv->item.second;
+		}
+	}
+}
+
+void TGraphUDEL::scan(int currentPos, int beginPos, int endPos, ForbidPairList& now, 
+	int mainLabel, int mainLabelPos, int eid, int forbidTimeStartT, bool dynamicMode, int& localNoise, 
+	int& noiseNum, int& lastMainLabelPos) {
+	
+	int labelsSum = currentPos - beginPos;
+	int tempTimestampPosForIT = currentPos * nEdge + eid;
+	if (dynamicMode) lazyUpdate(currentPos, tempTimestampPosForIT, eid);//update aft
+	int nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+	while (currentPos < currNTimestamp) {
+		int intvLen = nextLabPos - currentPos;
+		int edgeType = lab[tempTimestampPosForIT];
+		if (edgeType == mainLabel) {
+			localNoise = 0;
+			double minNoise = Setting::delta * (labelsSum + 1);
+			if (LESSEQ(noiseNum, minNoise)) {
+				lastMainLabelPos = nextLabPos - 1;
+				if (forbidTimeStartT != -1) {
+					now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
+					forbidTimeStartT = -1;
+				}
+			}
+			else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
+				if (forbidTimeStartT == -1) {
+					forbidTimeStartT = max(endPos, currentPos) + startT;
+				}
+			}
+			else {
+				lastMainLabelPos = nextLabPos - 1;
+				double checkNum = (noiseNum - minNoise) / Setting::delta;
+				int noiseT;
+				if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
+				else noiseT = (int)checkNum + currentPos + startT;
+				if (forbidTimeStartT == -1) {
+					now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
+				}
+				else {
+					now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
+					forbidTimeStartT = -1;
+				}
+			}
+		}
+		else {
+			if (forbidTimeStartT == -1) {
+				forbidTimeStartT = max(endPos, currentPos) + startT;
+			}
+			localNoise += intvLen;
+			noiseNum += intvLen;
+			if (localNoise > Setting::c) break;
+			//if (MORE(noiseNum, Setting::delta * allLen)) break;
+		}
+		labelsSum += intvLen;
+
+		currentPos = nextLabPos;
+		tempTimestampPosForIT = currentPos * nEdge + eid;
+		if (edgeType == mainLabel) {
+			if (currentPos < currNTimestamp) {
+				if (dynamicMode) lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, eid);//update aft
+				nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
+			}
+		}
+		else {
+			if (currentPos < currNTimestamp) {
+				if (dynamicMode) lazyUpdate(currentPos, tempTimestampPosForIT, eid);//update aft
+				nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
+			}
+		}
+	}
+	if (forbidTimeStartT != -1) {
+		now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
+	}
+	scanT[mainLabelPos] = nextLabPos - 1;
+}
+
+void TGraphUDEL::fetchPreEMaxIntvl(CircularQueue<NVIntv>& preEMaxIntvlPtr, int eid, int mainLabel, 
+	int timestampPosForEMaxIntvlEndT, int& EMaxIntvlStartT, int& EMaxIntvlEndT) {
+	if (maxIntv[eid].second == -1) {
+		EMaxIntvlEndT = -1;
+	}
+	else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
+		EMaxIntvlEndT = maxIntv[eid].second;
+	}
+	else {
+		EMaxIntvlEndT = -1;
+		int last = preEMaxIntvlPtr.rear;
+		if (last != preEMaxIntvlPtr.front) {
+			int temp = preEMaxIntvlPtr.rear - 1;
+			for (; temp != preEMaxIntvlPtr.front; temp--) {
+				tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
+				if (getEdgeLabel(eid, (EMaxIntvlEndT - startT)) == mainLabel) break;
+			}
+			if (temp == preEMaxIntvlPtr.front) {
+				tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
+				if (getEdgeLabel(eid, (EMaxIntvlEndT - startT)) != mainLabel) EMaxIntvlEndT = -1;
+			}
+		}
+	}
+}
+#pragma region FRTM and OPT1
 
 void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
-	vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed) {
+	vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed, bool dynamicMode, int* edgeSetsRAdd) {
 
-	int edgeType, mainLabel;
+	int mainLabel;
 	int beginPos = intvB - startT;
 	int endPos = intvE - startT;
 	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
 	int savePos;
 	int graphLastPos = endT - startT;
 	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
+	int lastMainLabelPos, lastMainLabelT;
 	int forbidTimeStartT;
 	int noiseNum;
 	int checkPos = beginPos - 1;
 	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
+	int EMaxIntvlStartT = -1, EMaxIntvlEndT = -1;
 	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
 
 	int timestampPosForEMaxIntvlEndT;
 	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
 
 		mainLabel = lab[posUsedForEdgeFilter + i];
 		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
-		mainLabelPos = labelPosForEdge + mainLabel;
+		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
 
-		auto& now = vioT[mainLabelPos];
-		currentPos = scanT[mainLabelPos];
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];
+		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
+		currentPos = scanT[mainLabelPos];//scanT[e,mainL] before updated
+		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];//maxIntv[e,mainL] 
 		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
 		
 		if (currentPos != 0) {
-			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
+			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
+				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
 					continue;
 				}
 				else {
 					auto intvItem = now.first;
 
 					bool shrink = false;
-					while (intvItem != nullptr) {
+					if (Setting::delta != 0 && Setting::c != 0) {
+						while (intvItem != nullptr) {//check tabuT[e,mainL]
 
-						if (intvItem->item.first > maxIntv[i].second) break;
-						else if (intvItem->item.second >= maxIntv[i].second) {//shrink
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
+							if (intvItem->item.first > maxIntv[i].second) break;//no noise
+							else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
+								shrink = true;
+								savePos = intvItem->item.first - 1 - intvE;
+								if (savePos >= 0) {
+									removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+									saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+								break;
 							}
-							break;
-						}
-						
-						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
-						}
-						else {
-							int labelSum = intvItem->item.second - intvB + 2;
-							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
-							}
-						}
 
-						if (intvItem->next != nullptr) {
-							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
+							int tempEWPos = (intvItem->item.second - startT) * nEdge + i;
+							if (lab[tempEWPos] == mainLabel) {
+								now.increaseItemLen(intvItem->item);
+							}
+							else {
+								int labelSum = intvItem->item.second - intvB + 2;
+								if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
+									now.increaseItemLen(intvItem->item);
+								}
+							}
+
+							if (intvItem->next != nullptr) {
+								if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
+									now.combineNextNode(intvItem);
+								}
+								else intvItem = intvItem->next;
+							}
+							else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
+								shrink = true;
+								savePos = intvItem->item.first - 1 - intvE;
+								if (savePos >= 0) {
+									removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+									saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								}
+								break;
 							}
 							else intvItem = intvItem->next;
 						}
-						else if (intvItem->item.second >= maxIntv[i].second) {//shrink
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp); 
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-						else intvItem = intvItem->next;
 					}
 
 					if (!shrink) {
 						savePos = maxIntv[i].second - intvE;
 						if (savePos >= 0) {
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < intvE) {//no overlap
-									preEMaxIntvlPtr.swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-								//else break;
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-
+							removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+							saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 						}
 					}
 				}
 
-				//Test::comprp1n++;
-				//Test::comprp1t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
 				now.removeNodeLessThan(intvE);
 				continue;
 			}
@@ -455,27 +750,9 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 				//Test::comprp2n++;
 				now.removeNodeLessThan(intvE);
 
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
+				fetchPreEMaxIntvl(preEMaxIntvlPtr, i, mainLabel, timestampPosForEMaxIntvlEndT,
+					EMaxIntvlStartT, EMaxIntvlEndT);
+
 				lastMainLabelT = max(EMaxIntvlEndT, intvB);
 				if (currentPos < beginPos) { //does not scan
 					localNoise = 0;
@@ -486,154 +763,12 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 					auto forbidIntv = now.first;
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								localNoise = 0;
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							}
+							getCurrentNoise(currentPos,  mainLabel, i, localNoise, noiseNum);
 						}
 					}
 					else {
 						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL],1)-1, endT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										//lastMainLabelPos = nextLabPos - 1;
-										//remove = 0;
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										//remove += intvLen;
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										//remove = 0;
-										//lastMainLabelPos = nextLabPos - 1;
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT,stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-								}
-								else {
-									if (tempT <= stopT)
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								//now.vioT.addNodeAft(tempIntv, make_pair(forbidTimeStartT,
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
+						updateVioT(intvB, now, forbidIntv, mainLabel, i, dynamicMode, localNoise, noiseNum);
 
 						//get the last time where the edge has main label
 						auto lastIntv = now.tail;
@@ -653,36 +788,21 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 						}
 					}
 					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
+						//dynamic
+						if (dynamicMode) {
+							saveToMidResult(lastMainLabelT - startT, i, localNoise, mainLabelPos, intvB, now);
+						}
+
 						if (lastMainLabelT >= intvE) {
 							if (lastMainLabelT == maxIntv[i].second) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
+								removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								if(edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 							}
 							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
+								int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+								removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*,  preMaxEMaxIntvlStartT*/);
 
 								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
@@ -695,29 +815,14 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 										maxIntv[i].second = EMaxIntvlEndT;
 									}
 								}
-
-								selectedNum++;
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 							}
 							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
+								int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+								removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*,  preMaxEMaxIntvlStartT*/);
+								
 								if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 								}
@@ -731,10 +836,9 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 									maxIntv[i].second = EMaxIntvlEndT;
 								}
 
-								selectedNum++;
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 							}
 						}
 
@@ -745,13 +849,9 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 						lastMainLabelPos = lastMainLabelT - startT;
 					}
 				}
-
-
-				//Test::comprp2t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
 			}
 
 			forbidTimeStartT = -1;
-			//auto tail = now.vioT.tail;
 			auto tail = now.tail;
 			if (tail != nullptr && tail->item.second+1 == currentPos + startT) {
 				forbidTimeStartT = tail->item.first;
@@ -766,125 +866,32 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 			forbidTimeStartT = -1;
 			noiseNum = 0;
 		}
-		labelsSum = currentPos - beginPos;
 		
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-		
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT],1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-			}
-			else {
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-		
+		scan(currentPos, beginPos, endPos, now, mainLabel, mainLabelPos, i, forbidTimeStartT, dynamicMode, localNoise,
+			noiseNum, lastMainLabelPos);
 		
 		if (lastMainLabelPos < endPos) {
+			//dynamic
+			if (dynamicMode) {
+				saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
+			}
 			continue;
 		}
 
 		currentT = lastMainLabelPos + startT;
 		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = lastMainLabelPos - endPos;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-
+			removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+			savePos = currentT - intvE;
+			saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			if(edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 		}
 		else if (currentT < maxIntv[i].second) {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
+			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT, preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*, preMaxEMaxIntvlStartT*/, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
 
 			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
 					maxIntv[i].first = intvB;
 					maxIntv[i].second = currentT;
 				}
@@ -896,33 +903,20 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 					}
 				}
 			}
-
-			selectedNum++;
 			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+			saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 		}
 		else {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
+			//dynamic
+			if (dynamicMode) {
+				saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
 			}
+
+			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
+			int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*, preMaxEMaxIntvlStartT*/, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
+
 			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 			}
@@ -938,768 +932,31 @@ void TGraphUDEL::edgeFilterFRTM(int intvB, int intvE,
 					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
 				}
 			}
-
-			selectedNum++;
 			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-		}
-	}
-}
-
-void TGraphUDEL::edgeFilterFRTMMidR(int intvB, int intvE,
-	vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint,
-	int k, bool*& fixLabel, bool isEdgeTypeFixed) {
-
-	int edgeType, mainLabel;
-	int beginPos = intvB - startT;
-	int endPos = intvE - startT;
-	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
-	int savePos;
-	int graphLastPos = endT - startT;
-	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
-	int forbidTimeStartT;
-	int noiseNum;
-	int checkPos = beginPos - 1;
-	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
-	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
-
-	int timestampPosForEMaxIntvlEndT;
-	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		mainLabel = lab[posUsedForEdgeFilter + i];
-		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
-		mainLabelPos = labelPosForEdge + mainLabel;
-
-		auto& now = vioT[mainLabelPos];
-		currentPos = scanT[mainLabelPos];
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];
-
-		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
-		
-		if (currentPos != 0) {
-			
-			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid intervals
-					continue;
-				}
-				else {
-					auto intvItem = now.first;
-
-					bool shrink = false;
-					while (intvItem != nullptr) {
-
-						if (intvItem->item.first > maxIntv[i].second) break;
-						else if (intvItem->item.second >= maxIntv[i].second) {//shrink
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preMaxIntv[i].swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-
-						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
-						}
-						else {
-							int labelSum = intvItem->item.second - intvB + 2;
-							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
-							}
-						}
-
-						if (intvItem->next != nullptr) {
-							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
-							}
-							else intvItem = intvItem->next;
-						}
-						else if (intvItem->item.second >= maxIntv[i].second) {//shrink
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-						else intvItem = intvItem->next;
-					}
-
-					if (!shrink) {
-						savePos = maxIntv[i].second - intvE;
-						if (savePos >= 0) {
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < intvE) {//no overlap
-									preMaxIntv[i].swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-								//else break;
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-
-						}
-					}
-				}
-
-				now.removeNodeLessThan(intvE);
-				continue;
-			}
-			else {
-				//Test::comprp2n++;
-				//now.vioT.removeNodeLessThan(intvE);
-				now.removeNodeLessThan(intvE);
-
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
-				lastMainLabelT = max(EMaxIntvlEndT, intvB);
-				if (currentPos < beginPos) { //does not scan
-					//now.localNoise = 0;
-					localNoise = 0;
-					currentPos = lastMainLabelPos = beginPos;
-					noiseNum = 0;
-				}
-				else {
-					auto forbidIntv = now.first;
-					if (forbidIntv == nullptr) {//does not need update
-						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-								localNoise = 0;
-							}
-						}
-					}
-					else {
-						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										//lastMainLabelPos = nextLabPos - 1;
-										//remove = 0;
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										//remove += intvLen;
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										//remove = 0;
-										//lastMainLabelPos = nextLabPos - 1;
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT) {
-										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-									}
-								}
-								else {
-									if (tempT <= stopT) {
-										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-									}
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
-
-						//get the last time where the edge has main label
-						auto lastIntv = now.tail;
-						int updateEndT = min(currentPos + startT, endT);
-						if (lastIntv != nullptr) {
-							//tie(intvStartT, intvEndT/*, std::ignore*/) = lastIntv->item;
-							if (lastIntv->item.second != updateEndT) {
-								lastMainLabelT = updateEndT;
-								localNoise = 0;
-							}
-							else {
-								lastMainLabelT = lastIntv->item.first - 1;
-							}
-						}
-						else {
-							lastMainLabelT = updateEndT;
-							localNoise = 0;
-						}
-					}
-					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int checkPos = (lastMainLabelT - startT)*nEdge + i;
-						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
-						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
-						//dynamic
-						if (localNoise <= Setting::c) {
-							checkPos = labelEnd * nEdge + i;
-							lazyUpdate(labelEnd, checkPos, i);//update aft
-							if (aft[checkPos] != -MYINFINITE) {
-								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-									newEIntR->emplace_back(rd4);
-									newValidMidResult.emplace_back(true);
-								}
-							}
-							else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-								newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-								MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-								newEIntR->emplace_back(rd4);
-								newValidMidResult.emplace_back(true);
-							}
-						}
-						else {
-							if (newPosInEIntR[mainLabelPos] >= 0) {
-								newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-								newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-							}
-						}
-
-						if (lastMainLabelT >= intvE) {
-							if (lastMainLabelT == maxIntv[i].second) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									//if (intv.endT < intvE) {//no overlap
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-
-								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-									if (EMaxIntvlEndT < lastMainLabelT) {
-										maxIntv[i].first = intvB;
-										maxIntv[i].second = lastMainLabelT;
-									}
-									else {
-										maxIntv[i].first = EMaxIntvlStartT;
-										maxIntv[i].second = EMaxIntvlEndT;
-									}
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									//if (intv.endT < intvE) {//no overlap
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-								if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-								}
-
-								if (EMaxIntvlEndT < lastMainLabelT) {
-									maxIntv[i].first = intvB;
-									maxIntv[i].second = lastMainLabelT;
-								}
-								else {
-									maxIntv[i].first = EMaxIntvlStartT;
-									maxIntv[i].second = EMaxIntvlEndT;
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-						}
-
-						continue;
-					}
-					else {
-						currentPos = max(currentPos + 1, beginPos);
-						lastMainLabelPos = lastMainLabelT - startT;
-					}
-				}
-				//Test::comprp2t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
-			}
-
-			forbidTimeStartT = -1;
-			auto tail = now.tail;
-			if (tail != nullptr && tail->item.second + 1 == currentPos + startT) {
-				forbidTimeStartT = tail->item.first;
-				if (tail->pre != nullptr)
-					now.deleteNextNode(tail->pre);
-				else now.deleteFirstNode();
-			}
-		}
-		else {
-			localNoise = 0;
-			currentPos = lastMainLabelPos = beginPos;
-			forbidTimeStartT = -1;
-			noiseNum = 0;
-		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - aft[tempTimestampPosForIT - nEdge] - 2, endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp){
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-
-
-		if (lastMainLabelPos < endPos) {
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-			
-			continue;
-		}
-		//vioT[i].removeNodeLessThan(intvE);
-
-		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
-		currentT = lastMainLabelPos + startT;
-		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = lastMainLabelPos - endPos;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-
-		}
-		else if (currentT < maxIntv[i].second) {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
-			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
-					maxIntv[i].first = intvB;
-					maxIntv[i].second = currentT;
-				}
-				else {
-					maxIntv[i].first = maxEMaxIntvlStartT;
-					maxIntv[i].second = maxEMaxIntvlEndT;
-					if (maxEMaxIntvlEndT > currentT) {
-						now.addItemAtLast(make_pair(currentT + 1, maxEMaxIntvlEndT));
-					}
-				}
-			}
-
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-		}
-		else {
-
-			//dynamic
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-			
-
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-			}
-
-			if (maxEMaxIntvlEndT < lastMainLabelPos + startT) {
-				maxIntv[i].first = intvB;
-				maxIntv[i].second = lastMainLabelPos + startT;
-			}
-			else {
-				maxIntv[i].first = maxEMaxIntvlStartT;
-				maxIntv[i].second = maxEMaxIntvlEndT;
-				if (maxEMaxIntvlEndT > lastMainLabelPos + startT) {
-					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
-				}
-			}
-
-
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+			saveToEdgeSetsR(currentT - intvE, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 		}
 	}
 }
 
 void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 	vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, 
-	int k, bool*& fixLabel, bool isEdgeTypeFixed) {
+	int k, bool*& fixLabel, bool isEdgeTypeFixed, int* edgeSetsRAdd) {
 
 	int edgeType, mainLabel;
 	int beginPos = intvB - startT;
 	int endPos = intvE - startT, checkEndPos = oriEndTE - startT;
 	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
 	int savePos;
 	int graphLastPos = endT - startT;
 	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
+	int  lastMainLabelPos, lastMainLabelT;
 	int forbidTimeStartT;
 	int noiseNum;
 	int checkPos = beginPos - 1;
 	int labelPosForEdge = 0;
 	int EMaxIntvlStartT, EMaxIntvlEndT;
 	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
 
 	int timestampPosForEMaxIntvlEndT;
 	auto fromMidREnd = edgesInEIntR->end(), fromMidRIter = edgesInEIntR->begin();
@@ -1798,20 +1055,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 								shrink = true;
 								int tempEndT = intvItem->item.first - 1;
 								if (tempEndT >= intvE) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-										temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preMaxIntv[i].swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										//else break;
-									}
+									removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+									
 									savePos = tempEndT - oriEndTE;
 									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+										saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 									}
 								}
 								break;
@@ -1819,19 +1067,18 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 							int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
 							if (lab[tempEWPos] == mainLabel) {
-								intvItem->item.second++;
+								now.increaseItemLen(intvItem->item);
 							}
 							else {
 								int labelSum = intvItem->item.second - intvB + 2;
 								if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-									intvItem->item.second++;
+									now.increaseItemLen(intvItem->item);
 								}
 							}
 
 							if (intvItem->next != nullptr) {
 								if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-									intvItem->item.second = intvItem->next->item.second;
-									now.deleteNextNode(intvItem);
+									now.combineNextNode(intvItem);
 								}
 								else intvItem = intvItem->next;
 							}
@@ -1839,20 +1086,11 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 								shrink = true;
 								int tempEndT = intvItem->item.first - 1;
 								if (tempEndT >= intvE) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-										temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										//else break;
-									}
+									removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+									
 									savePos = tempEndT - oriEndTE;
 									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+										saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 									}
 								}
 								break;
@@ -1862,28 +1100,16 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 						if (!shrink) {
 							if (maxIntv[i].second >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
+								removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
 
 								savePos = maxIntv[i].second - oriEndTE;
 								if (savePos >= 0) {
-									selectedNum++;
-									if (rightEndpoint < savePos) rightEndpoint = savePos;
-									edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+									saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 								}
 							}
 						}
 					}
 
-					//Test::comprp1n++;
-					//Test::comprp1t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
 					now.removeNodeLessThan(intvE);
 					continue;
 				}
@@ -1891,27 +1117,9 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 					//Test::comprp2n++;
 					now.removeNodeLessThan(intvE);
 
-					if (maxIntv[i].second == -1) {
-						EMaxIntvlEndT = -1;
-					}
-					else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-						EMaxIntvlEndT = maxIntv[i].second;
-					}
-					else {
-						EMaxIntvlEndT = -1;
-						int last = preEMaxIntvlPtr.rear;
-						if (last != preEMaxIntvlPtr.front) {
-							int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-							for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-							}
-							if (temp == preEMaxIntvlPtr.front) {
-								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-							}
-						}
-					}
+					fetchPreEMaxIntvl(preEMaxIntvlPtr, i, mainLabel, timestampPosForEMaxIntvlEndT,
+						EMaxIntvlStartT, EMaxIntvlEndT);
+					
 					lastMainLabelT = max(EMaxIntvlEndT, intvB);
 					if (currentPos < beginPos) { //does not scan
 						localNoise = 0;
@@ -1922,159 +1130,12 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 						auto forbidIntv = now.first;
 						if (forbidIntv == nullptr) {//does not need update
 							if (currentPos != currNTimestamp) {
-								int timestampPosForEL = currentPos * nEdge + i;
-								edgeType = lab[timestampPosForEL];
-								if (edgeType != mainLabel) {
-									int eLvalue = max(bef[timestampPosForEL], 1);
-									int tempTPos = timestampPosForEL - eLvalue * nEdge;
-									int tempPosForLabels = currentPos - eLvalue;
-									localNoise = eLvalue;
-									while (lab[tempTPos] != mainLabel) {
-										eLvalue = max(bef[tempTPos], 1);
-										tempPosForLabels -= eLvalue;
-										localNoise += eLvalue;
-										tempTPos -= eLvalue * nEdge;
-									}
-									noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-								}
-								else {
-									localNoise = 0;
-									noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-								}
+								getCurrentNoise(currentPos, mainLabel, i, localNoise, noiseNum);
 							}
 						}
 						else {
 							//update vioT
-
-							//get noiseNum, localNoise
-							int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-							int tempPos = tempT - startT, intvLen = tempT - intvB;
-							labelsSum = tempT - intvB;
-							int tempTimestampPosForEL = tempPos * nEdge + i;
-							edgeType = lab[tempTimestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[tempTimestampPosForEL], 1);
-								int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = tempPos - eLvalue;
-								localNoise = eLvalue - 1;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-								localNoise = 0;
-							}
-
-							auto tempIntv = forbidIntv;
-							while (forbidIntv != nullptr) {
-
-								forbidTimeStartT = -1;
-								lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-								int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-								while (tempT <= stopT) {
-
-									intvLen = nextLabT - tempT;
-									edgeType = lab[tempTimestampPosForEL];
-									if (edgeType == mainLabel) {
-										localNoise = 0;
-										minNoise = Setting::delta * (labelsSum + 1);
-										if (LESSEQ(noiseNum, minNoise)) {
-											//lastMainLabelPos = nextLabPos - 1;
-											//remove = 0;
-											if (forbidTimeStartT != -1) {
-												now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-												forbidTimeStartT = -1;
-												tempIntv = tempIntv->next;
-											}
-										}
-										else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-											//remove += intvLen;
-											if (forbidTimeStartT == -1) {
-												forbidTimeStartT = tempT + startT;
-											}
-										}
-										else {
-											//remove = 0;
-											//lastMainLabelPos = nextLabPos - 1;
-											checkNum = (noiseNum - minNoise) / Setting::delta;
-											if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-											else noiseT = (int)checkNum + tempT;
-											if (forbidTimeStartT == -1) {
-												now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-												tempIntv = tempIntv->next;
-											}
-											else {
-												now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-												tempIntv = tempIntv->next;
-												forbidTimeStartT = -1;
-											}
-										}
-									}
-									else {
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-										localNoise += intvLen;
-										noiseNum += intvLen;
-									}
-									labelsSum += intvLen;
-
-									tempT = nextLabT;
-									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-									if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-										if (tempT <= stopT) {
-											lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-											nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-										}
-									}
-									else {
-										if (tempT <= stopT){
-											lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-											nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-										}
-									}
-								}
-								if (forbidTimeStartT != -1) {
-									if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-										now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-										tempIntv = tempIntv->next;
-
-										forbidIntv = forbidIntv->pre;
-										tempIntv = tempIntv->next;
-										if (forbidIntv == nullptr) {
-											now.deleteFirstNode();
-										}
-										else now.deleteNextNode(forbidIntv);
-										forbidIntv = tempIntv;
-
-									}
-									else {
-										tempIntv = forbidIntv = forbidIntv->next;
-									}
-								}
-								else {
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-								}
-
-								if (forbidIntv != nullptr) {
-									tempT = forbidIntv->item.first;
-									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-									labelsSum = tempT - intvB;
-									localNoise = 0;
-									stopT = forbidIntv->item.second;
-								}
-							}
+							updateVioT(intvB, now, forbidIntv, mainLabel, i, true, localNoise, noiseNum);
 
 							//get the last time where the edge has main label
 							auto lastIntv = now.tail;
@@ -2095,34 +1156,8 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 							}
 						}
 						if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-							int checkPos = (lastMainLabelT - startT) *nEdge + i;
-							lazyUpdate(lastMainLabelT, checkPos, i);//update aft
-							int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
 							//dynamic
-							if (localNoise <= Setting::c) {
-								checkPos = labelEnd * nEdge + i;
-								lazyUpdate(labelEnd, checkPos, i);//update aft
-								if (aft[checkPos] != -MYINFINITE) {
-									if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-										newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-										MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-										newEIntR->emplace_back(rd4);
-										newValidMidResult.emplace_back(true);
-									}
-								}
-								else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-									newEIntR->emplace_back(rd4);
-									newValidMidResult.emplace_back(true);
-								}
-							}
-							else {
-								if (newPosInEIntR[mainLabelPos] >= 0) {
-									newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-									newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-								}
-							}
+							saveToMidResult(lastMainLabelT - startT, i, localNoise, mainLabelPos, intvB, now);
 							
 							if (lastMainLabelT >= intvE) {
 								if (lastMainLabelT >= oriEndTE)
@@ -2130,37 +1165,18 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 								else if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
 
 								if (lastMainLabelT == maxIntv[i].second) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-									}
+									removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+
 									savePos = lastMainLabelT - oriEndTE;
 									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+										saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+										if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 									}
 								}
 								else if (lastMainLabelT < maxIntv[i].second) {
-									int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										else {
-											int tempTimestampPos = (intv.second - startT)*nEdge + i;
-											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-												preMaxEMaxIntvlEndT = intv.second;
-												preMaxEMaxIntvlStartT = intv.first;
-											}
-										}
-									}
-
+									int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+									removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE,i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT);
+									
 									if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 										if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 										if (EMaxIntvlEndT < lastMainLabelT) {
@@ -2175,28 +1191,14 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 									savePos = lastMainLabelT - oriEndTE;
 									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+										saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+										if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 									}
 								}
 								else {
-									int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										else {
-											int tempTimestampPos = (intv.second - startT)*nEdge + i;
+									int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+									removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT);
 
-											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-												preMaxEMaxIntvlEndT = intv.second;
-												preMaxEMaxIntvlStartT = intv.first;
-											}
-										}
-									}
 									if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 										preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 									}
@@ -2212,9 +1214,8 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 
 									savePos = lastMainLabelT - oriEndTE;
 									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+										saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+										if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 									}
 								}
 							}
@@ -2248,164 +1249,39 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 			}
 		}
 
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp){
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
+		scan(currentPos, beginPos, endPos, now, mainLabel, mainLabelPos, i, forbidTimeStartT, true, localNoise,
+			noiseNum, lastMainLabelPos);
 
 		if (lastMainLabelPos >= checkEndPos)
 			posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
 		else if (posInEIntR[mainLabelPos] != EMaxIntvlChange::CHANGED) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
 		if (lastMainLabelPos < endPos) {
 
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
+			saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
 			
 			continue;
 		}
 		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
 		currentT = lastMainLabelPos + startT;
 		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
+			removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, intvE);
+
 			savePos = currentT - oriEndTE;
 			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+				saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+				if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 			}
 
 		}
 		else if (currentT < maxIntv[i].second) {
 			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
+			int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
 
 			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
 					maxIntv[i].first = intvB;
 					maxIntv[i].second = currentT;
 				}
@@ -2417,1450 +1293,21 @@ void TGraphUDEL::edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
 					}
 				}
 			}
-			//else now.addItemAtLast(make_pair(currentT + 1, maxIntv[i].second));
 
 			savePos = currentT - oriEndTE;
 			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+				saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+				if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 			}
 		}
 		else {
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
 			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-		
-
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-			}
-
-			if (maxEMaxIntvlEndT < lastMainLabelPos + startT) {
-				maxIntv[i].first = intvB;
-				maxIntv[i].second = lastMainLabelPos + startT;
-			}
-			else {
-				maxIntv[i].first = maxEMaxIntvlStartT;
-				maxIntv[i].second = maxEMaxIntvlEndT;
-				if (maxEMaxIntvlEndT > lastMainLabelPos + startT) {
-					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
-				}
-			}
-
-			savePos = currentT - oriEndTE;
-			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			}
-		}
-	}
-}
-#pragma endregion
-
-#pragma region FRTMOpt1
-
-void TGraphUDEL::edgeFilterOpt1(int intvB, int intvE,
-	vec(int)*& edgeSetsRAdd, vec(int)*& edgeSetsR, int& selectedNum,  int& rightEndpoint, 
-	int k, bool*& fixLabel, bool isEdgeTypeFixed) {
-
-	int edgeType, mainLabel;
-	int beginPos = intvB - startT;
-	int endPos = intvE - startT;
-	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
-	int savePos;
-	int graphLastPos = endT - startT;
-	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
-	int forbidTimeStartT;
-	int noiseNum;
-	int checkPos = beginPos - 1;
-	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
-	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
-
-	int timestampPosForEMaxIntvlEndT;
-	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		//auto beginTest = std::chrono::steady_clock::now();
-		
-		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
-		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
-		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
-
-		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
-		currentPos = scanT[mainLabelPos];//scanT[e,mainL] before updated
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];//maxIntv[e,mainL] 
-		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
-		
-		if (currentPos != 0) {
-
-			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
-					continue;
-				}
-				else {
-					auto intvItem = now.first;
-
-					bool shrink = false;
-					while (intvItem != nullptr) {//check tabuT[e,mainL]
-
-						if (intvItem->item.first > maxIntv[i].second) break;//no noise
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							savePos = tempEndT - intvE;
-							if (savePos >= 0) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-
-						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
-						}
-						else {
-							int labelSum = intvItem->item.second - intvB + 2;
-							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
-							}
-						}
-
-						if (intvItem->next != nullptr) {
-							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
-							}
-							else intvItem = intvItem->next;
-						}
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {//maintain maxIntv[e,mainL]
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-						else intvItem = intvItem->next;
-					}
-
-					if (!shrink) {
-						savePos = maxIntv[i].second - intvE;
-						if (savePos >= 0) {//R set does not change
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < intvE) {//no overlap
-									preEMaxIntvlPtr.swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-								//else break;
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-						}
-					}
-				}
-
-				//Test::comprp1n++;
-				//Test::comprp1t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
-				
-				now.removeNodeLessThan(intvE);
-				continue;
-			}
-			else {
-				//Test::comprp2n++;
-				//now.vioT.removeNodeLessThan(intvE);
-				now.removeNodeLessThan(intvE);
-
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
-				lastMainLabelT = max(EMaxIntvlEndT, intvB);
-				if (currentPos < beginPos) { //does not scan
-					//now.localNoise = 0;
-					localNoise = 0;
-					currentPos = lastMainLabelPos = beginPos;
-					noiseNum = 0;
-				}
-				else {
-					auto forbidIntv = now.first;
-					if (forbidIntv == nullptr) {//does not need update
-						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								localNoise = 0;
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							}
-						}
-					}
-					else {
-						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										//lastMainLabelPos = nextLabPos - 1;
-										//remove = 0;
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										//remove += intvLen;
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										//remove = 0;
-										//lastMainLabelPos = nextLabPos - 1;
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-								}
-								else {
-									if (tempT <= stopT)
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								//now.vioT.addNodeAft(tempIntv, make_pair(forbidTimeStartT,
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
-
-						//get the last time where the edge has main label
-						auto lastIntv = now.tail;
-						int updateEndT = min(currentPos + startT, endT);
-						if (lastIntv != nullptr) {
-							//tie(intvStartT, intvEndT/*, std::ignore*/) = lastIntv->item;
-							if (lastIntv->item.second != updateEndT) {
-								lastMainLabelT = updateEndT;
-								localNoise = 0;
-							}
-							else {
-								lastMainLabelT = lastIntv->item.first - 1;
-							}
-						}
-						else {
-							lastMainLabelT = updateEndT;
-							localNoise = 0;
-						}
-					}
-					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						if (lastMainLabelT >= intvE) {
-							if (lastMainLabelT == maxIntv[i].second) {
-								
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-							}
-							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-
-								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-									/*if (Test::testingMode == 3) {
-										if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
-										}
-										else {
-											cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
-										}
-									}*/
-									if (EMaxIntvlEndT < lastMainLabelT) {
-										maxIntv[i].first = intvB;
-										maxIntv[i].second = lastMainLabelT;
-									}
-									else {
-										maxIntv[i].first = EMaxIntvlStartT;
-										maxIntv[i].second = EMaxIntvlEndT;
-									}
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-								
-							}
-							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-								if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-								}
-								/*if (Test::testingMode ==  3 && maxIntv[i].second != -1 && lab[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
-									cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << lastMainLabelT << "," << idToLabel[mainLabel] << "]" << endl;
-								}*/
-								if (EMaxIntvlEndT < lastMainLabelT) {
-									maxIntv[i].first = intvB;
-									maxIntv[i].second = lastMainLabelT;
-								}
-								else {
-									maxIntv[i].first = EMaxIntvlStartT;
-									maxIntv[i].second = EMaxIntvlEndT;
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-								
-							}
-						}
-
-						continue;
-					}
-					else {
-						currentPos = max(currentPos + 1, beginPos);
-						lastMainLabelPos = lastMainLabelT - startT;
-					}
-				}
-
-				//Test::comprp2t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
-			}
-
-			forbidTimeStartT = -1;
-			auto tail = now.tail;
-			if (tail != nullptr && tail->item.second + 1 == currentPos + startT) {
-				forbidTimeStartT = tail->item.first;
-				if (tail->pre != nullptr)
-					now.deleteNextNode(tail->pre);
-				else now.deleteFirstNode();
-			}
-		}
-		else {
-			localNoise = 0;
-			currentPos = lastMainLabelPos = beginPos;
-			forbidTimeStartT = -1;
-			noiseNum = 0;
-		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-			}
-			else {
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-		
-		if (lastMainLabelPos < endPos) {
-			continue;
-		}
-
-		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
-		currentT = lastMainLabelPos + startT;
-		if (currentT == maxIntv[i].second) {
-			/*if (Test::testingMode == 3 && maxIntv[i].second != -1 && lab[timestampPosForEMaxIntvlEndT] != mainLabel && intvB <= maxIntv[i].second) {
-				cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-			}*/
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = lastMainLabelPos - endPos;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-		else if (currentT < maxIntv[i].second) {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
-			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-				/*if (Test::testingMode == 3) {
-					if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-					}
-					else {
-						cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-					}
-				}*/
-				if (maxEMaxIntvlEndT < currentT) {
-					maxIntv[i].first = intvB;
-					maxIntv[i].second = currentT;
-				}
-				else {
-					maxIntv[i].first = maxEMaxIntvlStartT;
-					maxIntv[i].second = maxEMaxIntvlEndT;
-					if (maxEMaxIntvlEndT > currentT) {
-						now.addItemAtLast(make_pair(currentT + 1, maxEMaxIntvlEndT));
-					}
-				}
-			}
-
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-		else {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-			}
-
-			if (maxEMaxIntvlEndT < lastMainLabelPos + startT) {
-				maxIntv[i].first = intvB;
-				maxIntv[i].second = lastMainLabelPos + startT;
-			}
-			else {
-				maxIntv[i].first = maxEMaxIntvlStartT;
-				maxIntv[i].second = maxEMaxIntvlEndT;
-				if (maxEMaxIntvlEndT > lastMainLabelPos + startT) {
-					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
-				}
-			}
+			saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
 			
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-	}
-}
-
-void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAdd,/**/
-	vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed) {
-
-	int edgeType, mainLabel;
-	int beginPos = intvB - startT;
-	int endPos = intvE - startT;
-	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
-	int savePos;
-	int graphLastPos = endT - startT;
-	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
-	int forbidTimeStartT;
-	int noiseNum;
-	int checkPos = beginPos - 1;
-	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
-	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
-
-	int timestampPosForEMaxIntvlEndT;
-	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		//auto beginTest = std::chrono::steady_clock::now();
-
-		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
-		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
-		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
-
-		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
-		currentPos = scanT[mainLabelPos];//scanT[e,mainL] before updated
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];//maxIntv[e,mainL] 
-		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
-		if (currentPos != 0) {
-
-			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
-					continue;
-				}
-				else {
-					auto intvItem = now.first;
-
-					bool shrink = false;
-					while (intvItem != nullptr) {//check tabuT[e,mainL]
-
-						if (intvItem->item.first > maxIntv[i].second) break;//no noise
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							savePos = tempEndT - intvE;
-							if (savePos >= 0) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-
-						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
-						}
-						else {
-							int labelSum = intvItem->item.second - intvB + 2;
-							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
-							}
-						}
-
-						if (intvItem->next != nullptr) {
-							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
-							}
-							else intvItem = intvItem->next;
-						}
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {//maintain maxIntv[e,mainL]
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-							}
-							break;
-						}
-						else intvItem = intvItem->next;
-					}
-
-					if (!shrink) {
-						savePos = maxIntv[i].second - intvE;
-						if (savePos >= 0) {//R set does not change
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < intvE) {//no overlap
-									preEMaxIntvlPtr.swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-								//else break;
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-						}
-					}
-				}
-
-				//Test::comprp1n++;
-				//Test::comprp1t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
-				now.removeNodeLessThan(intvE);
-				continue;
-			}
-			else {
-				//Test::comprp2n++;
-				//now.vioT.removeNodeLessThan(intvE);
-				now.removeNodeLessThan(intvE);
-
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
-				lastMainLabelT = max(EMaxIntvlEndT, intvB);
-				if (currentPos < beginPos) { //does not scan
-					localNoise = 0;
-					currentPos = lastMainLabelPos = beginPos;
-					noiseNum = 0;
-				}
-				else {
-					auto forbidIntv = now.first;
-					if (forbidIntv == nullptr) {//does not need update
-						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								localNoise = 0;
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							}
-						}
-					}
-					else {
-						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT) {
-										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-									}
-								}
-								else {
-									if (tempT <= stopT)	{
-										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-									}
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
-
-						//get the last time where the edge has main label
-						auto lastIntv = now.tail;
-						int updateEndT = min(currentPos + startT, endT);
-						if (lastIntv != nullptr) {
-							if (lastIntv->item.second != updateEndT) {
-								lastMainLabelT = updateEndT;
-								localNoise = 0;
-							}
-							else {
-								lastMainLabelT = lastIntv->item.first - 1;
-							}
-						}
-						else {
-							lastMainLabelT = updateEndT;
-							localNoise = 0;
-						}
-					}
-					if (currentPos + 1 == currNTimestamp/* || MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int checkPos = (lastMainLabelT - startT)*nEdge + i;
-						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
-						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
-						//dynamic
-						if (localNoise <= Setting::c) {
-							checkPos = labelEnd * nEdge + i;
-							lazyUpdate(labelEnd, checkPos, i);//update aft
-							if (aft[checkPos] != -MYINFINITE) {
-								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-									newEIntR->emplace_back(rd4);
-									newValidMidResult.emplace_back(true);
-								}
-							}
-							else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-								newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-								MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-								newEIntR->emplace_back(rd4);
-								newValidMidResult.emplace_back(true);
-							}
-						}
-						else {
-							if (newPosInEIntR[mainLabelPos] >= 0) {
-								newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-								newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-							}
-						}
-
-						if (lastMainLabelT >= intvE) {
-							if (lastMainLabelT == maxIntv[i].second) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-
-							}
-							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-
-								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-									if (EMaxIntvlEndT < lastMainLabelT) {
-										maxIntv[i].first = intvB;
-										maxIntv[i].second = lastMainLabelT;
-									}
-									else {
-										maxIntv[i].first = EMaxIntvlStartT;
-										maxIntv[i].second = EMaxIntvlEndT;
-									}
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-
-							}
-							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-								if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-								}
-
-								if (EMaxIntvlEndT < lastMainLabelT) {
-									maxIntv[i].first = intvB;
-									maxIntv[i].second = lastMainLabelT;
-								}
-								else {
-									maxIntv[i].first = EMaxIntvlStartT;
-									maxIntv[i].second = EMaxIntvlEndT;
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-							}
-						}
-
-						continue;
-					}
-					else {
-						currentPos = max(currentPos + 1, beginPos);
-						lastMainLabelPos = lastMainLabelT - startT;
-					}
-				}
-
-
-				//Test::comprp2t += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - beginTest).count();
-			}
-
-			forbidTimeStartT = -1;
-			auto tail = now.tail;
-			if (tail != nullptr && tail->item.second + 1 == currentPos + startT) {
-				forbidTimeStartT = tail->item.first;
-				if (tail->pre != nullptr)
-					now.deleteNextNode(tail->pre);
-				else now.deleteFirstNode();
-			}
-		}
-		else {
-			localNoise = 0;
-			currentPos = lastMainLabelPos = beginPos;
-			forbidTimeStartT = -1;
-			noiseNum = 0;
-		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-
-		if (lastMainLabelPos < endPos) {
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-			continue;
-		}
-
-		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
-		currentT = lastMainLabelPos + startT;
-		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = lastMainLabelPos - endPos;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-		else if (currentT < maxIntv[i].second) {
 			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
-			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
-					maxIntv[i].first = intvB;
-					maxIntv[i].second = currentT;
-				}
-				else {
-					maxIntv[i].first = maxEMaxIntvlStartT;
-					maxIntv[i].second = maxEMaxIntvlEndT;
-					if (maxEMaxIntvlEndT > currentT) {
-						now.addItemAtLast(make_pair(currentT + 1, maxEMaxIntvlEndT));
-					}
-				}
-			}
-
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-		else {
-			//dynamic
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
+			int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, intvE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
+			
 			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 			}
@@ -3876,862 +1323,38 @@ void TGraphUDEL::edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAd
 					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
 				}
 			}
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-		}
-	}
-}
-
-void TGraphUDEL::edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE,
-	vec(int)*& edgeSetsRAdd,
-	vec(int)*& edgeSetsR, int& selectedNum,
-	int& rightEndpoint,
-	int k, bool*& fixLabel, bool isEdgeTypeFixed) {
-
-	int edgeType, mainLabel;
-	//int eLen, eLvalue;
-	//unordered_map<int, bool>::iterator fixLabelEnd = fixLabel.end();
-	int beginPos = intvB - startT;
-	int endPos = intvE - startT, checkEndPos = oriEndTE - startT;
-	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen;
-	int savePos;
-	int graphLastPos = endT - startT;
-	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
-	int forbidTimeStartT;
-	int noiseNum;
-	int checkPos = beginPos - 1;
-	int labelPosForEdge;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
-	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
-
-	//bool addItem;
-	//int oriEndT, oriStartT;
-	int timestampPosForEMaxIntvlEndT;
-	auto fromMidREnd = edgesInEIntR->end(), fromMidRIter = edgesInEIntR->begin();
-
-	for (; fromMidRIter != fromMidREnd; ++fromMidRIter) {
-
-		int i = *fromMidRIter;
-		labelPosForEdge = i * numOfLabel;
-
-		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
-		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
-		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
-		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
-		currentPos = scanT[mainLabelPos];//scanT[e,mainL] before updated
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];//maxIntv[e,mainL] 
-		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
-
-		if (posInEIntR[mainLabelPos] == EMaxIntvlChange::INTVINIT) {//initial 
-			continue;
-		}
-		else if (posInEIntR[mainLabelPos] >= 0) {//continue to scan
-			if (currentPos == 0) continue; //initial
-
-			//recover localNoise , noiseNum and lastMainLabelPos
-			int timestampPosForEL = currentPos * nEdge + i;
-			edgeType = lab[timestampPosForEL];
-			if (edgeType != mainLabel) {
-				int eLvalue = max(bef[timestampPosForEL], 1);
-				int tempTPos = timestampPosForEL - eLvalue * nEdge;
-				int tempPosForLabels = currentPos - eLvalue;
-				localNoise = eLvalue;
-				while (lab[tempTPos] != mainLabel) {
-					eLvalue = max(bef[tempTPos], 1);
-					tempPosForLabels -= eLvalue;
-					localNoise += eLvalue;
-					tempTPos -= eLvalue * nEdge;
-				}
-				noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-			}
-			else {
-				localNoise = 0;
-				noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-			}
-
-			if (maxIntv[i].second == -1) {
-				lastMainLabelPos = beginPos;
-			}
-			else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-				lastMainLabelPos = max(maxIntv[i].second, beginPos);
-			}
-			else {
-				EMaxIntvlEndT = -1;
-				int last = preEMaxIntvlPtr.rear;
-				if (last != preEMaxIntvlPtr.front) {
-					int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-					for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-					}
-					if (temp == preEMaxIntvlPtr.front) {
-						EMaxIntvlEndT = preEMaxIntvlPtr.q[temp].second;
-						if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-					}
-				}
-				lastMainLabelPos = max(EMaxIntvlEndT, beginPos);
-			}
-
-			//recover vioT
-			forbidTimeStartT = -1;
-			auto tail = now.tail;
-			if (tail != nullptr && tail->item.second == currentPos + startT) {
-				forbidTimeStartT = tail->item.first;
-				lastMainLabelPos = forbidTimeStartT - 1;
-				if (tail->pre != nullptr)
-					now.deleteNextNode(tail->pre);
-				else now.deleteFirstNode();
-			}
-			currentPos = max(currentPos + 1, beginPos);
-		}
-		else {
-			if (currentPos != 0) {
-
-				if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-					if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
-						continue;
-					}
-					else {
-						auto intvItem = now.first;
-
-						bool shrink = false;
-						while (intvItem != nullptr) {//check tabuT[e,mainL]
-
-							if (intvItem->item.first > maxIntv[i].second) break;//no noise
-							else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-								shrink = true;
-								int tempEndT = intvItem->item.first - 1;
-								savePos = tempEndT - intvE;
-								if (savePos >= 0) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-										temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										//else break;
-									}
-									savePos = tempEndT - oriEndTE;
-									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-									}
-								}
-								break;
-							}
-
-							int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-							if (lab[tempEWPos] == mainLabel) {
-								intvItem->item.second++;
-							}
-							else {
-								int labelSum = intvItem->item.second - intvB + 2;
-								if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-									intvItem->item.second++;
-								}
-							}
-
-							if (intvItem->next != nullptr) {
-								if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-									intvItem->item.second = intvItem->next->item.second;
-									now.deleteNextNode(intvItem);
-								}
-								else intvItem = intvItem->next;
-							}
-							else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-								shrink = true;
-								int tempEndT = intvItem->item.first - 1;
-								if (tempEndT >= intvE) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-										temp++) {//maintain maxIntv[e,mainL]
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-									}
-									savePos = tempEndT - oriEndTE;
-									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-									}
-								}
-								break;
-							}
-							else intvItem = intvItem->next;
-						}
-
-						if (!shrink) {
-							if (maxIntv[i].second >= intvE) {//R set does not change
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < intvE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								savePos = maxIntv[i].second - oriEndTE;
-								if (savePos >= 0) {
-									selectedNum++;
-									if (rightEndpoint < savePos) rightEndpoint = savePos;
-									edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								}
-							}
-						}
-					}
-
-					now.removeNodeLessThan(intvE);
-					continue;
-				}
-				else {
-					//now.vioT.removeNodeLessThan(intvE);
-					now.removeNodeLessThan(intvE);
-
-					if (maxIntv[i].second == -1) {
-						EMaxIntvlEndT = -1;
-					}
-					else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-						EMaxIntvlEndT = maxIntv[i].second;
-					}
-					else {
-						EMaxIntvlEndT = -1;
-						int last = preEMaxIntvlPtr.rear;
-						if (last != preEMaxIntvlPtr.front) {
-							int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-							for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-							}
-							if (temp == preEMaxIntvlPtr.front) {
-								tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-								if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-							}
-						}
-					}
-					lastMainLabelT = max(EMaxIntvlEndT, intvB);
-					if (currentPos < beginPos) { //does not scan
-						localNoise = 0;
-						currentPos = lastMainLabelPos = beginPos;
-						noiseNum = 0;
-					}
-					else {
-						auto forbidIntv = now.first;
-						if (forbidIntv == nullptr) {//does not need update
-							if (currentPos != currNTimestamp) {
-								int timestampPosForEL = currentPos * nEdge + i;
-								edgeType = lab[timestampPosForEL];
-								if (edgeType != mainLabel) {
-									int eLvalue = max(bef[timestampPosForEL], 1);
-									int tempTPos = timestampPosForEL - eLvalue * nEdge;
-									int tempPosForLabels = currentPos - eLvalue;
-									localNoise = eLvalue;
-									while (lab[tempTPos] != mainLabel) {
-										eLvalue = max(bef[tempTPos], 1);
-										tempPosForLabels -= eLvalue;
-										localNoise += eLvalue;
-										tempTPos -= eLvalue * nEdge;
-									}
-									noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-								}
-								else {
-									localNoise = 0;
-									noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-								}
-							}
-						}
-						else {
-							//update vioT
-
-							//get noiseNum, localNoise
-							int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-							int tempPos = tempT - startT, intvLen = tempT - intvB;
-							labelsSum = tempT - intvB;
-							int tempTimestampPosForEL = tempPos * nEdge + i;
-							edgeType = lab[tempTimestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[tempTimestampPosForEL], 1);
-								int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = tempPos - eLvalue;
-								localNoise = eLvalue - 1;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-								localNoise = 0;
-							}
-
-							auto tempIntv = forbidIntv;
-							while (forbidIntv != nullptr) {
-
-								forbidTimeStartT = -1;
-								lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-								int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-								while (tempT <= stopT) {
-
-									intvLen = nextLabT - tempT;
-									edgeType = lab[tempTimestampPosForEL];
-									if (edgeType == mainLabel) {
-										localNoise = 0;
-										minNoise = Setting::delta * (labelsSum + 1);
-										if (LESSEQ(noiseNum, minNoise)) {
-											if (forbidTimeStartT != -1) {
-												now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-												forbidTimeStartT = -1;
-												tempIntv = tempIntv->next;
-											}
-										}
-										else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-											if (forbidTimeStartT == -1) {
-												forbidTimeStartT = tempT + startT;
-											}
-										}
-										else {
-											//remove = 0;
-											//lastMainLabelPos = nextLabPos - 1;
-											checkNum = (noiseNum - minNoise) / Setting::delta;
-											if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-											else noiseT = (int)checkNum + tempT;
-											if (forbidTimeStartT == -1) {
-												now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-												tempIntv = tempIntv->next;
-											}
-											else {
-												now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-												tempIntv = tempIntv->next;
-												forbidTimeStartT = -1;
-											}
-										}
-									}
-									else {
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-										localNoise += intvLen;
-										noiseNum += intvLen;
-									}
-									labelsSum += intvLen;
-
-									tempT = nextLabT;
-									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-									if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-										if (tempT <= stopT) {
-											lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-											nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-										}
-									}
-									else {
-										if (tempT <= stopT) {
-											lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-											nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-										}
-									}
-								}
-								if (forbidTimeStartT != -1) {
-									if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-										now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-										tempIntv = tempIntv->next;
-
-										forbidIntv = forbidIntv->pre;
-										tempIntv = tempIntv->next;
-										if (forbidIntv == nullptr) {
-											now.deleteFirstNode();
-										}
-										else now.deleteNextNode(forbidIntv);
-										forbidIntv = tempIntv;
-
-									}
-									else {
-										tempIntv = forbidIntv = forbidIntv->next;
-									}
-								}
-								else {
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-								}
-
-								if (forbidIntv != nullptr) {
-									tempT = forbidIntv->item.first;
-									tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-									labelsSum = tempT - intvB;
-									localNoise = 0;
-									stopT = forbidIntv->item.second;
-								}
-							}
-
-							//get the last time where the edge has main label
-							auto lastIntv = now.tail;
-							int updateEndT = min(currentPos + startT, endT);
-							if (lastIntv != nullptr) {
-								if (lastIntv->item.second != updateEndT) {
-									lastMainLabelT = updateEndT;
-									localNoise = 0;
-								}
-								else {
-									lastMainLabelT = lastIntv->item.first - 1;
-								}
-							}
-							else {
-								lastMainLabelT = updateEndT;
-								localNoise = 0;
-							}
-						}
-						if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-							int checkPos = (lastMainLabelT - startT)*nEdge + i;
-							lazyUpdate(lastMainLabelT, checkPos, i);//update aft
-							int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
-							//dynamic
-							if (localNoise <= Setting::c) {
-								checkPos = labelEnd * nEdge + i;
-								lazyUpdate(labelEnd, checkPos, i);//update aft
-								if (aft[checkPos] != -MYINFINITE) {
-									if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-										newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-										MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-										newEIntR->emplace_back(rd4);
-										newValidMidResult.emplace_back(true);
-									}
-								}
-								else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-									newEIntR->emplace_back(rd4);
-									newValidMidResult.emplace_back(true);
-								}
-							}
-							else {
-								if (newPosInEIntR[mainLabelPos] >= 0) {
-									newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-									newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-								}
-							}
-
-							if (lastMainLabelT >= intvE) {
-								if (lastMainLabelT >= oriEndTE)
-									posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
-								else if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
-
-								if (lastMainLabelT == maxIntv[i].second) {
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-									}
-									savePos = lastMainLabelT - oriEndTE;
-									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-										edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-									}
-								}
-								else if (lastMainLabelT < maxIntv[i].second) {
-									int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										else {
-											int tempTimestampPos = (intv.second - startT)*nEdge + i;
-											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-												preMaxEMaxIntvlEndT = intv.second;
-												preMaxEMaxIntvlStartT = intv.first;
-											}
-										}
-									}
-
-									if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-										if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-										if (EMaxIntvlEndT < lastMainLabelT) {
-											maxIntv[i].first = intvB;
-											maxIntv[i].second = lastMainLabelT;
-										}
-										else {
-											maxIntv[i].first = EMaxIntvlStartT;
-											maxIntv[i].second = EMaxIntvlEndT;
-										}
-									}
-
-									savePos = lastMainLabelT - oriEndTE;
-									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-										edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-									}
-								}
-								else {
-									int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-									for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-										auto& intv = preEMaxIntvlPtr.q[temp];
-										if (intv.second < intvE) {//no overlap
-											preEMaxIntvlPtr.swapToTop(temp);
-											preEMaxIntvlPtr.pop();
-										}
-										else {
-											int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-											if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-												preMaxEMaxIntvlEndT = intv.second;
-												preMaxEMaxIntvlStartT = intv.first;
-											}
-										}
-									}
-									if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-										preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-									}
-
-									if (EMaxIntvlEndT < lastMainLabelT) {
-										maxIntv[i].first = intvB;
-										maxIntv[i].second = lastMainLabelT;
-									}
-									else {
-										maxIntv[i].first = EMaxIntvlStartT;
-										maxIntv[i].second = EMaxIntvlEndT;
-									}
-
-									savePos = lastMainLabelT - oriEndTE;
-									if (savePos >= 0) {
-										selectedNum++;
-										if (rightEndpoint < savePos) rightEndpoint = savePos;
-										edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-										edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-									}
-								}
-							}
-
-							continue;
-						}
-						else {
-							currentPos = max(currentPos + 1, beginPos);
-							lastMainLabelPos = lastMainLabelT - startT;
-						}
-					}
-
-				}
-
-				forbidTimeStartT = -1;
-				auto tail = now.tail;
-				if (tail != nullptr && tail->item.second + 1 == currentPos + startT) {
-					forbidTimeStartT = tail->item.first;
-					if (tail->pre != nullptr)
-						now.deleteNextNode(tail->pre);
-					else now.deleteFirstNode();
-				}
-			}
-			else {
-				localNoise = 0;
-				currentPos = lastMainLabelPos = beginPos;
-				forbidTimeStartT = -1;
-				noiseNum = 0;
-			}
-		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-
-		if (lastMainLabelPos >= checkEndPos)
-			posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
-		else if (posInEIntR[mainLabelPos] != -1) posInEIntR[mainLabelPos] = EMaxIntvlChange::UNCHANGED;//R# for edge i is unchanged 
-		if (lastMainLabelPos < endPos) {
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-			continue;
-		}
-
-		//if ((isEdgeTypeFixed && fixLabel.find(idToLabel[mainLabel[i]]) == fixLabelEnd)) continue;
-		currentT = lastMainLabelPos + startT;
-		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			savePos = currentT - oriEndTE;
-			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-			}
-		}
-		else if (currentT < maxIntv[i].second) {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
-			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= intvE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
-					maxIntv[i].first = intvB;
-					maxIntv[i].second = currentT;
-				}
-				else {
-					maxIntv[i].first = maxEMaxIntvlStartT;
-					maxIntv[i].second = maxEMaxIntvlEndT;
-					if (maxEMaxIntvlEndT > currentT) {
-						now.addItemAtLast(make_pair(currentT + 1, maxEMaxIntvlEndT));
-					}
-				}
-			}
-			//else now.addItemAtLast(make_pair(currentT + 1, maxIntv[i].second));
 
 			savePos = currentT - oriEndTE;
 			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+				saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+				if (edgeSetsRAdd != nullptr) edgeSetsRAdd[i] = intvB;// add current row value
 			}
 		}
-		else {
-			//dynamic
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
-
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < intvE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-			if (maxIntv[i].second >= intvE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-			}
-
-			if (maxEMaxIntvlEndT < lastMainLabelPos + startT) {
-				maxIntv[i].first = intvB;
-				maxIntv[i].second = lastMainLabelPos + startT;
-			}
-			else {
-				maxIntv[i].first = maxEMaxIntvlStartT;
-				maxIntv[i].second = maxEMaxIntvlEndT;
-				if (maxEMaxIntvlEndT > lastMainLabelPos + startT) {
-					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
-				}
-			}
-			savePos = currentT - oriEndTE;
-			if (savePos >= 0) {
-				selectedNum++;
-				if (rightEndpoint < savePos) rightEndpoint = savePos;
-				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-			}
-		}
-
 	}
 }
 #pragma endregion
 
 
 #pragma region FRTMPLUS
-void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, bool*&hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,
-	vec(int)*& edgeSetsR, int& selectedNum, vec(int)*& edgeSetsRShortIntv, int& selectedNumShortIntv, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed) {
+void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, bool*&hasE, int*& newE, int& newENum, int*& edgeSetsRAdd,
+	vec(int)*& edgeSetsR, int& selectedNum, vec(int)*& edgeSetsRShortIntv, int& selectedNumShortIntv, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed, bool dynamicMode) {
 
 	int edgeType, mainLabel;
 	int beginPos = intvB - startT;
 	int endPos = intvE - startT;
 	int timePos = filterE - startT;
 	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen, intvLenNoNoise = filterE - intvB + 1;
+	int  intvLenNoNoise = filterE - intvB + 1;
 	int savePos;
 	int graphLastPos = endT - startT;
 	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
+	int lastMainLabelPos, lastMainLabelT;
 	int forbidTimeStartT;
 	int noiseNum;
 	int checkPos = beginPos - 1;
 	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
+	int EMaxIntvlStartT = -1, EMaxIntvlEndT = -1;
 	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
 	bool saveNoNoise;
 
 	int timestampPosForEMaxIntvlEndT;
@@ -4757,6 +1380,7 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 				maxIntvShortIntv[i].first = intvStart;
 				selectedNumShortIntv++;
 
+				if(dynamicMode) lazyUpdate(filterE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
 				int check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
 				maxIntvShortIntv[i].second = timePos + check;
 				check = min(check, limited);
@@ -4789,21 +1413,10 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 						if (intvItem->item.first > maxIntv[i].second) break;//no noise
 						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
 							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							savePos = tempEndT - intvE;
+							savePos = intvItem->item.first - 1 - intvE;
 							if (savePos >= 0) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									//else break;
-								}
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i);
+								removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, filterE);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 								hasE[i] = true;
 							}
 							break;
@@ -4811,38 +1424,27 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 
 						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
 						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
+							now.increaseItemLen(intvItem->item);
 						}
 						else {
 							int labelSum = intvItem->item.second - intvB + 2;
 							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
+								now.increaseItemLen(intvItem->item);
 							}
 						}
 
 						if (intvItem->next != nullptr) {
 							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
+								now.combineNextNode(intvItem);
 							}
 							else intvItem = intvItem->next;
 						}
 						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
 							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {//maintain maxIntv[e,mainL]
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i);
+							savePos = intvItem->item.first - 1 - intvE;
+							if (savePos >= 0) {
+								removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, filterE);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 								hasE[i] = true;
 							}
 							break;
@@ -4853,18 +1455,8 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 					if (!shrink) {
 						savePos = maxIntv[i].second - intvE;
 						if (savePos >= 0) {//R set does not change
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < filterE) {//no overlap
-									preEMaxIntvlPtr.swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-								//else break;
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
+							removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, filterE);
+							saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
 							hasE[i] = true;
 						}
 					}
@@ -4879,27 +1471,9 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 			else {
 				now.removeNodeLessThan(intvE);
 
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
+				fetchPreEMaxIntvl(preEMaxIntvlPtr, i, mainLabel, timestampPosForEMaxIntvlEndT,
+					EMaxIntvlStartT, EMaxIntvlEndT);
+
 				lastMainLabelT = max(EMaxIntvlEndT, intvB);
 				if (currentPos < beginPos) { //does not scan
 					//now.localNoise = 0;
@@ -4911,149 +1485,12 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 					auto forbidIntv = now.first;
 					if (forbidIntv == nullptr) {//does not need update
 						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								localNoise = 0;
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							}
+							getCurrentNoise(currentPos, mainLabel, i, localNoise, noiseNum);
 						}
 					}
 					else {
 						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										//remove = 0;
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT)
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-								}
-								else {
-									if (tempT <= stopT)
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
+						updateVioT(intvB, now, forbidIntv, mainLabel, i, dynamicMode, localNoise, noiseNum);
 
 						//get the last time where the edge has main label
 						auto lastIntv = now.tail;
@@ -5073,38 +1510,20 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 						}
 					}
 					if (currentPos + 1 == currNTimestamp/* || MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
+						if (dynamicMode) {
+							saveToMidResult(lastMainLabelT - startT, i, localNoise, mainLabelPos, intvB, now);
+						}
 						if (lastMainLabelT >= intvE) {
 							if (lastMainLabelT == maxIntv[i].second) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
+								removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, filterE);
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								edgeSetsRAdd[i] = intvB;
 								hasE[i] = true;
 							}
 							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
+								int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+								removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, filterE, i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*,  preMaxEMaxIntvlStartT*/);
 
 								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
@@ -5118,30 +1537,15 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 									}
 								}
 
-								selectedNum++;
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								edgeSetsRAdd[i] = intvB;
 								hasE[i] = true;
 							}
 							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
+								int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+								removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, filterE, i, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*,  preMaxEMaxIntvlStartT*/);
+								
 								if (maxIntv[i].second >= filterE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 								}
@@ -5155,11 +1559,9 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 									maxIntv[i].second = EMaxIntvlEndT;
 								}
 
-								selectedNum++;
 								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);
+								saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+								edgeSetsRAdd[i] = intvB;
 								hasE[i] = true;
 							}
 						}
@@ -5191,813 +1593,13 @@ void TGraphUDEL::edgeFilterPlus(int intvB, int intvE, int filterE, int limited, 
 			forbidTimeStartT = -1;
 			noiseNum = 0;
 		}
-		labelsSum = currentPos - beginPos;
-
-        auto a = std::chrono::steady_clock::now(); 
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(intvE, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(intvE, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(intvE, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-			}
-			else {
-				if (currentPos < currNTimestamp)
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-
-		//if (intvB == 0) {
-		//	long long b = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - a).count();
-		//	//cout << b << endl;
-		//	Test::counter += b;
-		//}
-		if (lastMainLabelPos < endPos) {
-			if (saveNoNoise) {
-				newE[newENum++] = i;
-			}
-			continue;
-		}
-
-		currentT = lastMainLabelPos + startT;
-		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);
-			hasE[i] = true;
-		}
-		else if (currentT < maxIntv[i].second) {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
-			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << idToLabel[lab[timestampPosForEMaxIntvlEndT]] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
-					maxIntv[i].first = intvB;
-					maxIntv[i].second = currentT;
-				}
-				else {
-					maxIntv[i].first = maxEMaxIntvlStartT;
-					maxIntv[i].second = maxEMaxIntvlEndT;
-					if (maxEMaxIntvlEndT > currentT) {
-						now.addItemAtLast(make_pair(currentT + 1, maxEMaxIntvlEndT));
-					}
-				}
-			}
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);
-			hasE[i] = true;
-		}
-		else {
-			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-			if (maxIntv[i].second >= filterE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-			}
-
-			if (maxEMaxIntvlEndT < lastMainLabelPos + startT) {
-				maxIntv[i].first = intvB;
-				maxIntv[i].second = lastMainLabelPos + startT;
-			}
-			else {
-				maxIntv[i].first = maxEMaxIntvlStartT;
-				maxIntv[i].second = maxEMaxIntvlEndT;
-				if (maxEMaxIntvlEndT > lastMainLabelPos + startT) {
-					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
-				}
-			}
-
-			selectedNum++;
-			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);
-			hasE[i] = true;
-		}
-
-		if (!hasE[i] && saveNoNoise) {
-			newE[newENum++] = i;
-		}
-	}
-}
-
-void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limited, bool*&/*iSet&*/hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,
-	vec(int)*& edgeSetsR, int& selectedNum, vec(int)*& edgeSetsRShortIntv, int& selectedNumShortIntv, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed) {
-
-	int edgeType, mainLabel;
-	int beginPos = intvB - startT;
-	int endPos = intvE - startT;
-	int timePos = filterE - startT;
-	int currentPos, mainLabelPos, currentT;
-	int labelsSum, intvLen, intvLenNoNoise = filterE - intvB + 1;
-	int savePos;
-	int graphLastPos = endT - startT;
-	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
-	int forbidTimeStartT;
-	int noiseNum;
-	int checkPos = beginPos - 1;
-	int labelPosForEdge = 0;
-	int EMaxIntvlStartT, EMaxIntvlEndT;
-	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
-	bool saveNoNoise;
-
-	int timestampPosForEMaxIntvlEndT;
-	for (int i = 0; i < nEdge; i++, labelPosForEdge += numOfLabel) {//O(|E|)
-		mainLabel = lab[posUsedForEdgeFilter + i];//mainL = L^intvB(e)
-		if (isEdgeTypeFixed && !fixLabel[mainLabel]) continue;
 		
-		saveNoNoise = false;
-		edgeType = lab[TGraph::posUsedForEdgeFilterShortIntv + i];//label at intvE
-		if (max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) >= intvLenNoNoise) {
-			int intvStart = filterE - max(bef[TGraph::posUsedForEdgeFilterShortIntv + i], 1) + 1;
-			int j = timePos + 1;
-			if (maxIntvShortIntv[i].second >= timePos && maxIntvShortIntv[i].first <= beginPos) {
-				int check = min(maxIntvShortIntv[i].second - timePos, limited);
-				selectedNumShortIntv++;
-				edgeSetsRShortIntv[check].emplace_back(i);
-				saveNoNoise = true;
-			}
-			else if (maxIntvShortIntv[i].second >= intvB - startT && maxIntvShortIntv[i].first <= timePos) {
-			}
-			else {
-				maxIntvShortIntv[i].first = intvStart;
-				selectedNumShortIntv++;
+		scan(currentPos, beginPos, endPos, now, mainLabel, mainLabelPos, i, forbidTimeStartT, dynamicMode, localNoise,
+			noiseNum, lastMainLabelPos); 
 				
-				lazyUpdate(filterE, TGraph::posUsedForEdgeFilterShortIntv + i, i);//update aft
-				int check = max(aft[TGraph::posUsedForEdgeFilterShortIntv + i], 1) - 1;
-				maxIntvShortIntv[i].second = timePos + check;
-				check = min(check, limited);
-				edgeSetsRShortIntv[check].emplace_back(i);
-				saveNoNoise = true;
-			}
-		}
-
-		mainLabelPos = labelPosForEdge + mainLabel;//position of <e,mainL>
-		
-		auto& now = vioT[mainLabelPos];//tabuT[e,mainL] before updated
-		currentPos = scanT[mainLabelPos];//scanT[e,mainL] before updated
-		CircularQueue<NVIntv>& preEMaxIntvlPtr = preMaxIntv[i];//maxIntv[e,mainL] 
-		timestampPosForEMaxIntvlEndT = (maxIntv[i].second - startT) * nEdge + i;
-		
-		if (currentPos != 0) {
-
-			if (mainLabel == lab[posUsedForEdgeFilter - nEdge + i]) {// L^intvB(e) = L^(intvB-1)(e)
-				if (maxIntv[i].second == -1 || maxIntv[i].second < intvE || lab[timestampPosForEMaxIntvlEndT] != mainLabel) {//no valid R sets for e
-					if (saveNoNoise) {
-						newE[newENum++] = i;
-					}
-					continue;
-				}
-				else {
-					auto intvItem = now.first;
-
-					bool shrink = false;
-					while (intvItem != nullptr) {//check tabuT[e,mainL]
-
-						if (intvItem->item.first > maxIntv[i].second) break;//no noise
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							savePos = tempEndT - intvE;
-							if (savePos >= 0) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i);
-								hasE[i] = true;
-							}
-							break;
-						}
-
-						int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
-						if (lab[tempEWPos] == mainLabel) {
-							intvItem->item.second++;
-						}
-						else {
-							int labelSum = intvItem->item.second - intvB + 2;
-							if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-								intvItem->item.second++;
-							}
-						}
-
-						if (intvItem->next != nullptr) {
-							if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-								intvItem->item.second = intvItem->next->item.second;
-								now.deleteNextNode(intvItem);
-							}
-							else intvItem = intvItem->next;
-						}
-						else if (intvItem->item.second >= maxIntv[i].second) {//R set to which e belongs shrinks
-							shrink = true;
-							int tempEndT = intvItem->item.first - 1;
-							if (tempEndT >= intvE) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-									temp++) {//maintain maxIntv[e,mainL]
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								savePos = tempEndT - intvE;
-								selectedNum++;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i);
-								hasE[i] = true;
-							}
-							break;
-						}
-						else intvItem = intvItem->next;
-					}
-
-					if (!shrink) {
-						savePos = maxIntv[i].second - intvE;
-						if (savePos >= 0) {//R set does not change
-							for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear;
-								temp++) {
-								auto& intv = preEMaxIntvlPtr.q[temp];
-								if (intv.second < filterE) {//no overlap
-									preEMaxIntvlPtr.swapToTop(temp);
-									preEMaxIntvlPtr.pop();
-								}
-							}
-							selectedNum++;
-							if (rightEndpoint < savePos) rightEndpoint = savePos;
-							edgeSetsR[savePos].emplace_back(i);
-							hasE[i] = true;
-						}
-					}
-				}
-				if (!hasE[i] && saveNoNoise) {
-					newE[newENum++] = i;
-				}
-				now.removeNodeLessThan(intvE);
-				continue;
-			}
-			else {
-				//Test::comprp2n++;
-				now.removeNodeLessThan(intvE);
-
-				if (maxIntv[i].second == -1) {
-					EMaxIntvlEndT = -1;
-				}
-				else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-					EMaxIntvlEndT = maxIntv[i].second;
-				}
-				else {
-					EMaxIntvlEndT = -1;
-					int last = preEMaxIntvlPtr.rear;
-					if (last != preEMaxIntvlPtr.front) {
-						int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-						for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-						}
-						if (temp == preEMaxIntvlPtr.front) {
-							tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-							if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-						}
-					}
-				}
-				lastMainLabelT = max(EMaxIntvlEndT, intvB);
-				if (currentPos < beginPos) { //does not scan
-					localNoise = 0;
-					currentPos = lastMainLabelPos = beginPos;
-					noiseNum = 0;
-				}
-				else {
-					auto forbidIntv = now.first;
-					if (forbidIntv == nullptr) {//does not need update
-						if (currentPos != currNTimestamp) {
-							int timestampPosForEL = currentPos * nEdge + i;
-							edgeType = lab[timestampPosForEL];
-							if (edgeType != mainLabel) {
-								int eLvalue = max(bef[timestampPosForEL], 1);
-								int tempTPos = timestampPosForEL - eLvalue * nEdge;
-								int tempPosForLabels = currentPos - eLvalue;
-								localNoise = eLvalue;
-								while (lab[tempTPos] != mainLabel) {
-									eLvalue = max(bef[tempTPos], 1);
-									tempPosForLabels -= eLvalue;
-									localNoise += eLvalue;
-									tempTPos -= eLvalue * nEdge;
-								}
-								noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-							}
-							else {
-								localNoise = 0;
-								noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							}
-						}
-					}
-					else {
-						//update vioT
-
-						//get noiseNum, localNoise
-						int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-						int tempPos = tempT - startT, intvLen = tempT - intvB;
-						labelsSum = tempT - intvB;
-						int tempTimestampPosForEL = tempPos * nEdge + i;
-						edgeType = lab[tempTimestampPosForEL];
-						if (edgeType != mainLabel) {
-							int eLvalue = max(bef[tempTimestampPosForEL], 1);
-							int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-							int tempPosForLabels = tempPos - eLvalue;
-							localNoise = eLvalue - 1;
-							while (lab[tempTPos] != mainLabel) {
-								eLvalue = max(bef[tempTPos], 1);
-								tempPosForLabels -= eLvalue;
-								localNoise += eLvalue;
-								tempTPos -= eLvalue * nEdge;
-							}
-							noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-						}
-						else {
-							noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-							localNoise = 0;
-						}
-
-						auto tempIntv = forbidIntv;
-						while (forbidIntv != nullptr) {
-
-							forbidTimeStartT = -1;
-							lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-							int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-							while (tempT <= stopT) {
-
-								intvLen = nextLabT - tempT;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType == mainLabel) {
-									localNoise = 0;
-									minNoise = Setting::delta * (labelsSum + 1);
-									if (LESSEQ(noiseNum, minNoise)) {
-										if (forbidTimeStartT != -1) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											forbidTimeStartT = -1;
-											tempIntv = tempIntv->next;
-										}
-									}
-									else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-										if (forbidTimeStartT == -1) {
-											forbidTimeStartT = tempT + startT;
-										}
-									}
-									else {
-										checkNum = (noiseNum - minNoise) / Setting::delta;
-										if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-										else noiseT = (int)checkNum + tempT;
-										if (forbidTimeStartT == -1) {
-											now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-										}
-										else {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-											tempIntv = tempIntv->next;
-											forbidTimeStartT = -1;
-										}
-									}
-								}
-								else {
-									if (forbidTimeStartT == -1) {
-										forbidTimeStartT = tempT + startT;
-									}
-									localNoise += intvLen;
-									noiseNum += intvLen;
-								}
-								labelsSum += intvLen;
-
-								tempT = nextLabT;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-									if (tempT <= stopT) {
-										lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-										nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-									}
-								}
-								else {
-									if (tempT <= stopT) {
-										lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-										nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-									}
-								}
-							}
-							if (forbidTimeStartT != -1) {
-								if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-									now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-									tempIntv = tempIntv->next;
-
-									forbidIntv = forbidIntv->pre;
-									tempIntv = tempIntv->next;
-									if (forbidIntv == nullptr) {
-										now.deleteFirstNode();
-									}
-									else now.deleteNextNode(forbidIntv);
-									forbidIntv = tempIntv;
-
-								}
-								else {
-									tempIntv = forbidIntv = forbidIntv->next;
-								}
-							}
-							else {
-								forbidIntv = forbidIntv->pre;
-								tempIntv = tempIntv->next;
-								if (forbidIntv == nullptr) {
-									now.deleteFirstNode();
-								}
-								else now.deleteNextNode(forbidIntv);
-								forbidIntv = tempIntv;
-							}
-
-							if (forbidIntv != nullptr) {
-								tempT = forbidIntv->item.first;
-								tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-								labelsSum = tempT - intvB;
-								localNoise = 0;
-								stopT = forbidIntv->item.second;
-							}
-						}
-
-						//get the last time where the edge has main label
-						auto lastIntv = now.tail;
-						int updateEndT = min(currentPos + startT, endT);
-						if (lastIntv != nullptr) {
-							if (lastIntv->item.second != updateEndT) {
-								lastMainLabelT = updateEndT;
-								localNoise = 0;
-							}
-							else {
-								lastMainLabelT = lastIntv->item.first - 1;
-							}
-						}
-						else {
-							lastMainLabelT = updateEndT;
-							localNoise = 0;
-						}
-					}
-					if (currentPos + 1 == currNTimestamp /*|| MORE(noiseNum, Setting::delta * allLen)*/ || localNoise > Setting::c) {
-						int checkPos = (lastMainLabelT - startT)*nEdge + i;
-						lazyUpdate(lastMainLabelT, checkPos, i);//update aft
-						int labelEnd = lastMainLabelT - startT + max(aft[checkPos], 1) - 1;
-						//dynamic
-						if (localNoise <= Setting::c) {
-							checkPos = labelEnd * nEdge + i;
-							lazyUpdate(labelEnd, checkPos, i);//update aft
-							if (aft[checkPos] != -MYINFINITE) {
-								if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-									newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-									MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-									newEIntR->emplace_back(rd4);
-									newValidMidResult.emplace_back(true);
-								}
-							}
-							else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-								newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-								MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-								newEIntR->emplace_back(rd4);
-								newValidMidResult.emplace_back(true);
-							}
-						}
-						else {
-							if (newPosInEIntR[mainLabelPos] >= 0) {
-								newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-								newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-							}
-						}
-
-						if (lastMainLabelT >= intvE) {
-							if (lastMainLabelT == maxIntv[i].second) {
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-								}
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-								hasE[i] = true;
-
-							}
-							else if (lastMainLabelT < maxIntv[i].second) {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-
-								if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
-									if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-									if (EMaxIntvlEndT < lastMainLabelT) {
-										maxIntv[i].first = intvB;
-										maxIntv[i].second = lastMainLabelT;
-									}
-									else {
-										maxIntv[i].first = EMaxIntvlStartT;
-										maxIntv[i].second = EMaxIntvlEndT;
-									}
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-								hasE[i] = true;
-							}
-							else {
-								int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-								for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-									auto& intv = preEMaxIntvlPtr.q[temp];
-									if (intv.second < filterE) {//no overlap
-										preEMaxIntvlPtr.swapToTop(temp);
-										preEMaxIntvlPtr.pop();
-									}
-									else {
-										int tempTimestampPos = (intv.second - startT)*nEdge + i;
-
-										if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-											preMaxEMaxIntvlEndT = intv.second;
-											preMaxEMaxIntvlStartT = intv.first;
-										}
-									}
-								}
-								if (maxIntv[i].second >= filterE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
-									preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
-								}
-
-								if (EMaxIntvlEndT < lastMainLabelT) {
-									maxIntv[i].first = intvB;
-									maxIntv[i].second = lastMainLabelT;
-								}
-								else {
-									maxIntv[i].first = EMaxIntvlStartT;
-									maxIntv[i].second = EMaxIntvlEndT;
-								}
-
-								selectedNum++;
-								savePos = lastMainLabelT - intvE;
-								if (rightEndpoint < savePos) rightEndpoint = savePos;
-								edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-								edgeSetsRAdd[savePos].emplace_back(i);// add current row value
-								hasE[i] = true;
-							}
-						}
-						if (!hasE[i] && saveNoNoise) {
-							newE[newENum++] = i;
-						}
-						continue;
-					}
-					else {
-						currentPos = max(currentPos + 1, beginPos);
-						lastMainLabelPos = lastMainLabelT - startT;
-					}
-				}
-			}
-
-			forbidTimeStartT = -1;
-			auto tail = now.tail;
-			if (tail != nullptr && tail->item.second + 1 == currentPos + startT) {
-				forbidTimeStartT = tail->item.first;
-				if (tail->pre != nullptr)
-					now.deleteNextNode(tail->pre);
-				else now.deleteFirstNode();
-			}
-		}
-		else {
-			localNoise = 0;
-			currentPos = lastMainLabelPos = beginPos;
-			forbidTimeStartT = -1;
-			noiseNum = 0;
-		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-				//if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
-
-
 		if (lastMainLabelPos < endPos) {
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			//dynamic
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
-			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
+			if (dynamicMode) {
+				saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
 			}
 			if (saveNoNoise) {
 				newE[newENum++] = i;
@@ -6007,54 +1609,20 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 
 		currentT = lastMainLabelPos + startT;
 		if (currentT == maxIntv[i].second) {
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-			}
-			selectedNum++;
-			savePos = lastMainLabelPos - endPos;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+			removeNonOverlapPreEMaxIntv(preEMaxIntvlPtr, filterE);
+			savePos = currentT - intvE;
+			saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			edgeSetsRAdd[i] = intvB;
 			hasE[i] = true;
 		}
 		else if (currentT < maxIntv[i].second) {
 			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
-
+			int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, filterE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*, preMaxEMaxIntvlStartT*/, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
+			
 			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
 					maxIntv[i].first = intvB;
 					maxIntv[i].second = currentT;
 				}
@@ -6066,63 +1634,20 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 					}
 				}
 			}
-
-			selectedNum++;
 			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+			saveToEdgeSetsR(savePos, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			edgeSetsRAdd[i] = intvB;
 			hasE[i] = true;
 		}
 		else {
-			//dynamic
-			int checkPos = lastMainLabelPos * nEdge + i;
-			lazyUpdate(lastMainLabelPos, checkPos, i);//update aft
-			int labelEnd = lastMainLabelPos + max(aft[checkPos], 1) - 1;
-			if (localNoise <= Setting::c) {
-				checkPos = labelEnd * nEdge + i;
-				lazyUpdate(labelEnd, checkPos, i);//update aft
-				if (aft[checkPos] != -MYINFINITE) {
-					if (-aft[checkPos] - 1 <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-						newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-						MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-						newEIntR->emplace_back(rd4);
-						newValidMidResult.emplace_back(true);
-					}
-				}
-				else if (endT - startT - labelEnd <= Setting::c && newPosInEIntR[mainLabelPos] < 0) {
-					newPosInEIntR[mainLabelPos] = (int)newEIntR->size();
-					MidResult* rd4 = DBG_NEW MidResult(intvB, i/*, lastMainLabelPos*/, maxIntv[i], preMaxIntv[i], scanT[mainLabelPos], now);
-					newEIntR->emplace_back(rd4);
-					newValidMidResult.emplace_back(true);
-				}
+			if (dynamicMode) {
+				saveToMidResult(lastMainLabelPos, i, localNoise, mainLabelPos, intvB, now);
 			}
-			else {
-				if (newPosInEIntR[mainLabelPos] >= 0) {
-					newValidMidResult[newPosInEIntR[mainLabelPos]] = false;
-					newPosInEIntR[mainLabelPos] = EMaxIntvlChange::INTVINIT;
-				}
-			}
+
 			int maxEMaxIntvlEndT = -1, maxEMaxIntvlStartT;
-			int preMaxEMaxIntvlEndT = -1, preMaxEMaxIntvlStartT;
-			for (int temp = preEMaxIntvlPtr.front; temp != preEMaxIntvlPtr.rear; temp++) {
-				auto& intv = preEMaxIntvlPtr.q[temp];
-				if (intv.second < filterE) {//no overlap
-					preEMaxIntvlPtr.swapToTop(temp);
-					preEMaxIntvlPtr.pop();
-				}
-				else {
-					int tempTimestampPos = (intv.second - startT)*nEdge + i;
-					if (lab[tempTimestampPos] == mainLabel && intv.second > maxEMaxIntvlEndT) {
-						maxEMaxIntvlEndT = intv.second;
-						maxEMaxIntvlStartT = intv.first;
-					}
-					if (lab[tempTimestampPos] == lab[timestampPosForEMaxIntvlEndT] && intv.second > preMaxEMaxIntvlEndT) {
-						preMaxEMaxIntvlEndT = intv.second;
-						preMaxEMaxIntvlStartT = intv.first;
-					}
-				}
-			}
+			int preMaxEMaxIntvlEndT = -1/*, preMaxEMaxIntvlStartT*/;
+			removeNonOverlapPreEMaxIntvWithMem(preEMaxIntvlPtr, filterE, i, mainLabel, timestampPosForEMaxIntvlEndT, preMaxEMaxIntvlEndT/*, preMaxEMaxIntvlStartT*/, maxEMaxIntvlEndT, maxEMaxIntvlStartT);
+			
 			if (maxIntv[i].second >= filterE && maxIntv[i].second > preMaxEMaxIntvlEndT) {
 				preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 			}
@@ -6138,42 +1663,38 @@ void TGraphUDEL::edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limit
 					now.addItemAtLast(make_pair(lastMainLabelPos + startT + 1, maxEMaxIntvlEndT));
 				}
 			}
-			
-			selectedNum++;
+
 			savePos = currentT - intvE;
-			if (rightEndpoint < savePos) rightEndpoint = savePos;
-			edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-			edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+			saveToEdgeSetsR(currentT - intvE, i, edgeSetsR, &now, selectedNum, rightEndpoint);
+			edgeSetsRAdd[i] = intvB;
 			hasE[i] = true;
 		}
+
 		if (!hasE[i] && saveNoNoise) {
 			newE[newENum++] = i;
 		}
 	}
-
 }
 
-void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int limited, int oriEndTE, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,
+
+void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int limited, int oriEndTE, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, int*& edgeSetsRAdd,
 	vec(int)*& edgeSetsR, int& selectedNum, vec(int)*& edgeSetsRShortIntv, int& selectedNumShortIntv, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed) {
 
 	int edgeType, mainLabel;
 	int beginPos = intvB - startT;
 	int endPos = intvE - startT, timePos = filterE - startT, checkEndPos = oriEndTE - startT;
-	int intvLen, intvLenNoNoise = filterE - intvB + 1;
+	int intvLenNoNoise = filterE - intvB + 1;
 	int currentPos, mainLabelPos, currentT;
-	int labelsSum;
 	int savePos;
 	int graphLastPos = endT - startT;
 	int allLen = graphLastPos - beginPos + 1;
-	int nextLabPos, lastMainLabelPos, lastMainLabelT;
+	int lastMainLabelPos, lastMainLabelT;
 	int forbidTimeStartT;
 	int noiseNum;
 	int checkPos = beginPos - 1;
 	int labelPosForEdge;
 	int EMaxIntvlStartT, EMaxIntvlEndT;
 	int localNoise;
-	int noiseT;
-	double minNoise, checkNum;
 	bool saveNoNoise;
 
 	int timestampPosForEMaxIntvlEndT;
@@ -6338,19 +1859,18 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 
 								int tempEWPos = (intvItem->item.second - startT)*nEdge + i;
 								if (lab[tempEWPos] == mainLabel) {
-									intvItem->item.second++;
+									now.increaseItemLen(intvItem->item);
 								}
 								else {
 									int labelSum = intvItem->item.second - intvB + 2;
 									if (MORE(dif[tempEWPos + nEdge] - dif[posUsedForEdgeFilter + i], Setting::delta * labelSum)) {
-										intvItem->item.second++;
+										now.increaseItemLen(intvItem->item);
 									}
 								}
 
 								if (intvItem->next != nullptr) {
 									if (intvItem->item.second + 1 == intvItem->next->item.first) {//combine
-										intvItem->item.second = intvItem->next->item.second;
-										now.deleteNextNode(intvItem);
+										now.combineNextNode(intvItem);
 									}
 									else intvItem = intvItem->next;
 								}
@@ -6416,30 +1936,11 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 						//Test::comprp2n++;
 						now.removeNodeLessThan(intvE);
 
-						if (maxIntv[i].second == -1) {
-							EMaxIntvlEndT = -1;
-						}
-						else if (lab[timestampPosForEMaxIntvlEndT] == mainLabel) {
-							EMaxIntvlEndT = maxIntv[i].second;
-						}
-						else {
-							EMaxIntvlEndT = -1;
-							int last = preEMaxIntvlPtr.rear;
-							if (last != preEMaxIntvlPtr.front) {
-								int temp = preEMaxIntvlPtr.rear - 1 /*+ CircularQueue<NVIntv>::queueSize) % CircularQueue<NVIntv>::queueSize*/;
-								for (; temp != preEMaxIntvlPtr.front; temp--/*) % CircularQueue<NVIntv>::queueSize*/) {
-									tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-									if (lab[(EMaxIntvlEndT - startT)*nEdge + i] == mainLabel) break;
-								}
-								if (temp == preEMaxIntvlPtr.front) {
-									tie(EMaxIntvlStartT, EMaxIntvlEndT) = preEMaxIntvlPtr.q[temp];
-									if (lab[(EMaxIntvlEndT - startT)*nEdge + i] != mainLabel) EMaxIntvlEndT = -1;
-								}
-							}
-						}
+						fetchPreEMaxIntvl(preEMaxIntvlPtr, i, mainLabel, timestampPosForEMaxIntvlEndT,
+							EMaxIntvlStartT, EMaxIntvlEndT);
+
 						lastMainLabelT = max(EMaxIntvlEndT, intvB);
 						if (currentPos < beginPos) { //does not scan
-							//now.localNoise = 0;
 							localNoise = 0;
 							currentPos = lastMainLabelPos = beginPos;
 							noiseNum = 0;
@@ -6448,159 +1949,12 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 							auto forbidIntv = now.first;
 							if (forbidIntv == nullptr) {//does not need update
 								if (currentPos != currNTimestamp) {
-									int timestampPosForEL = currentPos * nEdge + i;
-									edgeType = lab[timestampPosForEL];
-									if (edgeType != mainLabel) {
-										int eLvalue = max(bef[timestampPosForEL], 1);
-										int tempTPos = timestampPosForEL - eLvalue * nEdge;
-										int tempPosForLabels = currentPos - eLvalue;
-										localNoise = eLvalue;
-										while (lab[tempTPos] != mainLabel) {
-											eLvalue = max(bef[tempTPos], 1);
-											tempPosForLabels -= eLvalue;
-											localNoise += eLvalue;
-											tempTPos -= eLvalue * nEdge;
-										}
-										noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-									}
-									else {
-										localNoise = 0;
-										noiseNum = dif[timestampPosForEL] - dif[posUsedForEdgeFilter + i];
-									}
+									getCurrentNoise(currentPos, mainLabel, i, localNoise, noiseNum);
 								}
 							}
 							else {
 								//update vioT
-
-								//get noiseNum, localNoise
-								int tempT = forbidIntv->item.first, stopT = forbidIntv->item.second;
-								int tempPos = tempT - startT, intvLen = tempT - intvB;
-								labelsSum = tempT - intvB;
-								int tempTimestampPosForEL = tempPos * nEdge + i;
-								edgeType = lab[tempTimestampPosForEL];
-								if (edgeType != mainLabel) {
-									int eLvalue = max(bef[tempTimestampPosForEL], 1);
-									int tempTPos = tempTimestampPosForEL - eLvalue * nEdge;
-									int tempPosForLabels = tempPos - eLvalue;
-									localNoise = eLvalue - 1;
-									while (lab[tempTPos] != mainLabel) {
-										eLvalue = max(bef[tempTPos], 1);
-										tempPosForLabels -= eLvalue;
-										localNoise += eLvalue;
-										tempTPos -= eLvalue * nEdge;
-									}
-									noiseNum = dif[tempTPos] - dif[posUsedForEdgeFilter + i] + localNoise;
-								}
-								else {
-									noiseNum = dif[tempTimestampPosForEL] - dif[posUsedForEdgeFilter + i];
-									localNoise = 0;
-								}
-
-								auto tempIntv = forbidIntv;
-								while (forbidIntv != nullptr) {
-
-									forbidTimeStartT = -1;
-									lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-									int nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-									while (tempT <= stopT) {
-
-										intvLen = nextLabT - tempT;
-										edgeType = lab[tempTimestampPosForEL];
-										if (edgeType == mainLabel) {
-											localNoise = 0;
-											minNoise = Setting::delta * (labelsSum + 1);
-											if (LESSEQ(noiseNum, minNoise)) {
-												//lastMainLabelPos = nextLabPos - 1;
-												//remove = 0;
-												if (forbidTimeStartT != -1) {
-													now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-													forbidTimeStartT = -1;
-													tempIntv = tempIntv->next;
-												}
-											}
-											else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-												//remove += intvLen;
-												if (forbidTimeStartT == -1) {
-													forbidTimeStartT = tempT + startT;
-												}
-											}
-											else {
-												//remove = 0;
-												//lastMainLabelPos = nextLabPos - 1;
-												checkNum = (noiseNum - minNoise) / Setting::delta;
-												if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + tempT;
-												else noiseT = (int)checkNum + tempT;
-												if (forbidTimeStartT == -1) {
-													now.addNodeAft(tempIntv, make_pair(tempT, min(noiseT, stopT)));
-													tempIntv = tempIntv->next;
-												}
-												else {
-													now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, min(noiseT, stopT)));
-													tempIntv = tempIntv->next;
-													forbidTimeStartT = -1;
-												}
-											}
-										}
-										else {
-											if (forbidTimeStartT == -1) {
-												forbidTimeStartT = tempT + startT;
-											}
-											localNoise += intvLen;
-											noiseNum += intvLen;
-										}
-										labelsSum += intvLen;
-
-										tempT = nextLabT;
-										tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-										if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-											if (tempT <= stopT) {
-												lazyUpdate(tempT - 1, tempTimestampPosForEL - nEdge, i);//update aft
-												nextLabT = min(nextLabT - 2 - aft[tempTimestampPosForEL - nEdge], stopT) + 1;
-											}
-										}
-										else {
-											if (tempT <= stopT) {
-												lazyUpdate(tempT, tempTimestampPosForEL, i);//update aft
-												nextLabT = min(tempT + max(aft[tempTimestampPosForEL], 1) - 1, stopT) + 1;
-											}
-										}
-									}
-									if (forbidTimeStartT != -1) {
-										if (forbidTimeStartT != forbidIntv->item.first || tempT - 1 != stopT) {
-											now.addNodeAft(tempIntv, make_pair(forbidTimeStartT, tempT - 1));
-											tempIntv = tempIntv->next;
-
-											forbidIntv = forbidIntv->pre;
-											tempIntv = tempIntv->next;
-											if (forbidIntv == nullptr) {
-												now.deleteFirstNode();
-											}
-											else now.deleteNextNode(forbidIntv);
-											forbidIntv = tempIntv;
-
-										}
-										else {
-											tempIntv = forbidIntv = forbidIntv->next;
-										}
-									}
-									else {
-										forbidIntv = forbidIntv->pre;
-										tempIntv = tempIntv->next;
-										if (forbidIntv == nullptr) {
-											now.deleteFirstNode();
-										}
-										else now.deleteNextNode(forbidIntv);
-										forbidIntv = tempIntv;
-									}
-
-									if (forbidIntv != nullptr) {
-										tempT = forbidIntv->item.first;
-										tempTimestampPosForEL = (tempT - startT) * nEdge + i;
-										labelsSum = tempT - intvB;
-										localNoise = 0;
-										stopT = forbidIntv->item.second;
-									}
-								}
+								updateVioT(intvB, now, forbidIntv, mainLabel, i, true, localNoise, noiseNum);
 
 								//get the last time where the edge has main label
 								auto lastIntv = now.tail;
@@ -6669,7 +2023,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 											selectedNum++;
 											if (rightEndpoint < savePos) rightEndpoint = savePos;
 											edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-											edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+											edgeSetsRAdd[i] = intvB;
 											hasE[i] = true;
 										}
 									}
@@ -6707,7 +2061,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 											selectedNum++;
 											if (rightEndpoint < savePos) rightEndpoint = savePos;
 											edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-											edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+											edgeSetsRAdd[i] = intvB;
 											hasE[i] = true;
 										}
 									}
@@ -6746,7 +2100,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 											selectedNum++;
 											if (rightEndpoint < savePos) rightEndpoint = savePos;
 											edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-											edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+											edgeSetsRAdd[i] = intvB;
 											hasE[i] = true;
 										}
 									}
@@ -6789,76 +2143,8 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				}
 			}
 		}
-		labelsSum = currentPos - beginPos;
-
-		int tempTimestampPosForIT = currentPos * nEdge + i;
-
-
-		lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-		nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-		while (currentPos < currNTimestamp) {
-			intvLen = nextLabPos - currentPos;
-			edgeType = lab[tempTimestampPosForIT];
-			if (edgeType == mainLabel) {
-				localNoise = 0;
-				minNoise = Setting::delta * (labelsSum + 1);
-				if (LESSEQ(noiseNum, minNoise)) {
-					lastMainLabelPos = nextLabPos - 1;
-					//remove = 0;
-					if (forbidTimeStartT != -1) {
-						now.addItemAtLast(make_pair(forbidTimeStartT, currentPos + startT - 1));
-						forbidTimeStartT = -1;
-					}
-				}
-				else if (MORE(noiseNum, Setting::delta * (labelsSum + intvLen))) {
-					if (forbidTimeStartT == -1) {
-						forbidTimeStartT = max(endPos, currentPos) + startT;
-					}
-				}
-				else {
-					lastMainLabelPos = nextLabPos - 1;
-					checkNum = (noiseNum - minNoise) / Setting::delta;
-					if (EQ(round(checkNum), checkNum)) noiseT = (int)round(checkNum) - 1 + currentPos + startT;
-					else noiseT = (int)checkNum + currentPos + startT;
-					if (forbidTimeStartT == -1) {
-						now.addItemAtLast(make_pair(max(endPos, currentPos) + startT, noiseT));
-					}
-					else {
-						now.addItemAtLast(make_pair(forbidTimeStartT, noiseT));
-						forbidTimeStartT = -1;
-					}
-				}
-			}
-			else {
-				if (forbidTimeStartT == -1) {
-					forbidTimeStartT = max(endPos, currentPos) + startT;
-				}
-				localNoise += intvLen;
-				noiseNum += intvLen;
-				if (localNoise > Setting::c) break;
-			//	if (MORE(noiseNum, Setting::delta * allLen)) break;
-			}
-			labelsSum += intvLen;
-
-			currentPos = nextLabPos;
-			tempTimestampPosForIT = currentPos * nEdge + i;
-			if (edgeType == mainLabel) {//Lab[currentPos] != mainLabel
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos - 1, tempTimestampPosForIT - nEdge, i);//update aft
-					nextLabPos = min(nextLabPos - 2 - aft[tempTimestampPosForIT - nEdge], endT - startT) + 1;
-				}
-			}
-			else {
-				if (currentPos < currNTimestamp) {
-					lazyUpdate(currentPos, tempTimestampPosForIT, i);//update aft
-					nextLabPos = min(currentPos + max(aft[tempTimestampPosForIT], 1) - 1, endT - startT) + 1;
-				}
-			}
-		}
-		if (forbidTimeStartT != -1) {
-			now.addItemAtLast(make_pair(forbidTimeStartT, min(nextLabPos + startT - 1, endT)));
-		}
-		scanT[mainLabelPos] = nextLabPos - 1;
+		scan(currentPos, beginPos, endPos, now, mainLabel, mainLabelPos, i, forbidTimeStartT, true, localNoise,
+			noiseNum, lastMainLabelPos);
 
 		if (lastMainLabelPos >= checkEndPos)
 			posInEIntR[mainLabelPos] = EMaxIntvlChange::CHANGED;//R# for edge i is changed
@@ -6919,7 +2205,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				selectedNum++;
 				if (rightEndpoint < savePos) rightEndpoint = savePos;
 				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+				edgeSetsRAdd[i] = intvB;
 				hasE[i] = true;
 			}
 		}
@@ -6948,15 +2234,6 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 			if (lab[timestampPosForEMaxIntvlEndT] != mainLabel) {
 				if (maxIntv[i].second > preMaxEMaxIntvlEndT && maxIntv[i].second >= filterE) preEMaxIntvlPtr.push(make_pair(maxIntv[i].first, maxIntv[i].second));
 				if (maxEMaxIntvlEndT < currentT) {
-					/*if (Test::testingMode == 3) {
-						Test::containment++;
-						if (maxIntv[i].second > preMaxEMaxIntvlEndT) {
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << maxIntv[i].first << "," << maxIntv[i].second << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-						else{
-							cout << edgeList[i].first << "," << edgeList[i].second << ":[" << preMaxEMaxIntvlStartT << "," << preMaxEMaxIntvlEndT << "," << lab[timestampPosForEMaxIntvlEndT + i] << "] | [" << intvB << "," << currentT << "," << idToLabel[mainLabel] << "]" << endl;
-						}
-					}*/
 					maxIntv[i].first = intvB;
 					maxIntv[i].second = currentT;
 				}
@@ -6974,7 +2251,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				selectedNum++;
 				if (rightEndpoint < savePos) rightEndpoint = savePos;
 				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+				edgeSetsRAdd[i] = intvB;
 				hasE[i] = true;
 			}
 		}
@@ -7050,7 +2327,7 @@ void TGraphUDEL::edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int
 				selectedNum++;
 				if (rightEndpoint < savePos) rightEndpoint = savePos;
 				edgeSetsR[savePos].emplace_back(i/*, mainLabel*/);
-				edgeSetsRAdd[savePos].emplace_back(i);// add current row value
+				edgeSetsRAdd[i] = intvB;
 				hasE[i] = true;
 			}
 		}
@@ -7081,11 +2358,9 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int s
 	int next, p, noiseT, noiseNum/*, timestampPosForLabels*/;
 	for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter) {
 		edgeId = *edgeIter;
-		//timestampPosForLabels = edgeId * allNTimestamp;
 		label = lab[mainLabelPos*nEdge + edgeId];
 		int tempPosForEndTime = endTimePos * nEdge + edgeId;
 		if (label != lab[tempPosForEndTime]) {
-			//cout << mainLabelPos << " " << endTimePos << " " << edgeId << "%%" << endl;
 			return false;
 		}
 		p = startTimePos2;
@@ -7130,208 +2405,11 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int s
 			tempstampPosForEL = p * nEdge + edgeId;
 			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
 		}
-		//cout << field << " " << edgeId << endl;
 		if (field == 0)break;
 	}
 	return field != 0;
 }
-bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int*&subCCId, int startTimePos1, int startTimePos2, int endTimePos, int mainLabelPos, bool*& expandMask) {
-	auto edgeEnd = edges.end();
-	auto subCCIter = &subCCId[0];
-	int edgeId;
 
-	int sum, field = startTimePos2 - startTimePos1 + 1;
-	int label;
-	double minNoise, noiseLimit, checkNum;
-	int next, p, noiseT, noiseNum/*, timestampPosForLabels*/;
-	for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter,++subCCIter) {
-		if (*subCCIter != -1) {
-			edgeId = *edgeIter;
-			//timestampPosForLabels = edgeId * allNTimestamp;
-			label = lab[mainLabelPos*nEdge + edgeId];
-			int tempPosForEndTime = endTimePos * nEdge + edgeId;
-			if (label != lab[tempPosForEndTime]) {
-				return false;
-			}
-			p = startTimePos2;
-			int tempstampPosForEL = p * nEdge + edgeId;
-			next = p - max(bef[tempstampPosForEL], 1);
-			while (p >= startTimePos1) {
-				if (label != lab[tempstampPosForEL]) {
-					int stopP = max(next + 1, startTimePos1);
-					for (int tabu = p; tabu >= stopP; tabu--) {
-						if (expandMask[tabu - startTimePos1]) {
-							field--;
-							expandMask[tabu - startTimePos1] = false;
-							if (field == 0)break;
-						}
-					}
-				}
-				else {
-					sum = endTimePos - p;
-					noiseNum = dif[tempPosForEndTime] - dif[tempstampPosForEL];
-					noiseLimit = Setting::delta * sum;
-
-					if (MORE(noiseNum, noiseLimit)) {
-						minNoise = noiseLimit + Setting::delta;
-						if (noiseNum >= minNoise) {
-							checkNum = (noiseNum - minNoise) / Setting::delta;
-							if (EQ(round(checkNum), checkNum)) noiseT = p - ((int)round(checkNum) - 1);
-							else noiseT = p - (int)checkNum;
-
-
-							for (int tabu = p; tabu >= startTimePos1 && tabu >= noiseT; tabu--) {
-								if (expandMask[tabu - startTimePos1]) {
-									field--;
-									expandMask[tabu - startTimePos1] = false;
-									if (field == 0)break;
-								}
-							}
-						}
-					}
-				}
-				if (field == 0)break;
-				p = next;
-				tempstampPosForEL = p * nEdge + edgeId;
-				if (p >= 0) next = p - max(bef[tempstampPosForEL], 1);
-			}
-			//cout << field << " " << edgeId << endl;
-			if (field == 0)break;
-		}
-	}
-	return field != 0;
-}
-bool TGraphUDEL::bothFitDefAndSameLabelChangeStartTimePos(vec(int)& subCCs, vec(int)& edges, int startTimePos1, int startTimePos2, int endTimePos, int mainLabelPos, bool*& expandMask) {
-	auto edgeEnd = edges.end();
-	auto subCCEnd = subCCs.end();
-	int edgeId;
-
-	int sum, field = startTimePos2 - startTimePos1 + 1;
-	int label;
-	double minNoise, noiseLimit, checkNum;
-	int next, p, noiseT, noiseNum/*, timestampPosForLabels*/;
-	for (auto subCCIter = subCCs.begin(); subCCIter != subCCEnd; ++subCCIter) {
-		edgeId = edges[*subCCIter];
-		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = lab[mainLabelPos*nEdge + edgeId];
-		int tempPosForEndTime = endTimePos * nEdge + edgeId;
-		if (label != lab[tempPosForEndTime]) {
-			return false;
-		}
-		p = startTimePos2;
-		int tempstampPosForEL = p * nEdge + edgeId;
-		next = p - max(bef[tempstampPosForEL],1);
-		while (p >= startTimePos1) {
-			if (label != lab[tempstampPosForEL]) {
-				int stopP = max(next + 1, startTimePos1);
-				for (int tabu = p; tabu >= stopP; tabu--) {
-					if (expandMask[tabu - startTimePos1]) {
-						field--;
-						expandMask[tabu - startTimePos1] = false;
-						if (field == 0)break;
-					}
-				}
-			}
-			else {
-				sum = endTimePos - p;
-				noiseNum = dif[tempPosForEndTime] - dif[tempstampPosForEL];
-				noiseLimit = Setting::delta * sum;
-
-				if (MORE(noiseNum, noiseLimit)) {
-					minNoise = noiseLimit + Setting::delta;
-					if (noiseNum >= minNoise) {
-						checkNum = (noiseNum - minNoise) / Setting::delta;
-						if (EQ(round(checkNum), checkNum)) noiseT = p - ((int)round(checkNum) - 1);
-						else noiseT = p - (int)checkNum;
-
-
-						for (int tabu = p; tabu >= startTimePos1 && tabu >= noiseT; tabu--) {
-							if (expandMask[tabu - startTimePos1]) {
-								field--;
-								expandMask[tabu - startTimePos1] = false;
-								if (field == 0)break;
-							}
-						}
-					}
-				}
-			}
-			if (field == 0)break;
-			p = next;
-			tempstampPosForEL = p * nEdge + edgeId;
-			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
-		}
-		//cout << field << " " << edgeId << endl;
-		if (field == 0)break;
-	}
-	return field != 0;
-}
-bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(int)& edges, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask) {
-	auto edgeEnd = edges.end();
-	auto subCCEnd = subCCs.end();
-	int edgeId;
-
-	int sum, field = endTimePos2 - endTimePos1 + 1;
-	int label;
-	double minNoise, noiseLimit, checkNum;
-	int next, p, noiseT, noiseNum/*, timestampPosForLabels*/;
-	for (auto subCCIter = subCCs.begin(); subCCIter != subCCEnd; ++subCCIter) {
-		edgeId = edges[*subCCIter];
-		//timestampPosForLabels = edgeId * allNTimestamp;
-		label = lab[mainLabelPos*nEdge + edgeId];
-		int tempPosForStartTime = startTimePos * nEdge + edgeId;
-		if (label != lab[tempPosForStartTime]) {
-			//cout << mainLabelPos << " "<< startTimePos<<" "<<edgeId << "%"<< endl;
-			return false;
-		}
-		p = endTimePos2;
-		int tempstampPosForEL = p * nEdge + edgeId;
-		next = p - max(bef[tempstampPosForEL],1);
-		while (p >= endTimePos1) {
-			
-			if (label != lab[tempstampPosForEL]) {
-				int stopP = max(next + 1, endTimePos1);
-				for (int tabu = p; tabu >= stopP; tabu--) {
-					if (expandMask[tabu - endTimePos1]) {
-						field--;
-						expandMask[tabu - endTimePos1] = false;
-						if (field == 0)break;
-					}
-				}
-			}
-			else {
-				
-				sum = p - startTimePos + 1;
-				noiseNum = dif[tempstampPosForEL] - dif[tempPosForStartTime] ;
-				noiseLimit = Setting::delta * (sum - max(bef[tempstampPosForEL],1));
-				
-				if (MORE(noiseNum, noiseLimit)) {
-					minNoise = noiseLimit + Setting::delta;
-					if (noiseNum >= minNoise) {
-						checkNum = (noiseNum - minNoise) / Setting::delta;
-						if (EQ(round(checkNum), checkNum)) noiseT = next + (int)round(checkNum);
-						else noiseT = next + (int)checkNum + 1;
-
-						for (int tabu = min(noiseT, endTimePos2); tabu >= endTimePos1 && tabu >= next; tabu--) {
-							if (expandMask[tabu - endTimePos1]) {
-								field--;
-								expandMask[tabu - endTimePos1] = false;
-								if (field == 0)break;
-							}
-						}
-					}
-				}
-			}
-			if (field == 0)break;
-			p = next;
-			tempstampPosForEL = p * nEdge + edgeId;
-			if (p >= 0) next = p - max(bef[tempstampPosForEL],1);
-		}
-		//if(Test::counter == -1) cout << field << " " << edgeId << endl;
-		if (field == 0)break;
-	}
-	//if (Test::counter == -1) cout << field << endl;
-	return field != 0;
-}
 bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask) {
 	auto edgeEnd = edges.end();
 	int edgeId;
@@ -7404,91 +2482,22 @@ bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int sta
 
 	return field != 0;
 }
-bool TGraphUDEL::bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int*&subCCId, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask) {
-	auto edgeEnd = edges.end();
-	auto subCCIter = &subCCId[0];
-	int edgeId;
-	
-	int sum, field = endTimePos2 - endTimePos1 + 1;
-	int label;
-	double minNoise, noiseLimit, checkNum;
-	int next, p, noiseT, noiseNum/*, timestampPosForLabels*/;
-	for (auto edgeIter = edges.begin(); edgeIter != edgeEnd; ++edgeIter, ++subCCIter) {
-		if (*subCCIter != -1) {
-			edgeId = *edgeIter;
-			//timestampPosForLabels = edgeId * allNTimestamp;
-			label = lab[mainLabelPos*nEdge + edgeId];
-			int tempPosForStartTime = startTimePos * nEdge + edgeId;
-			if (label != lab[tempPosForStartTime]) {
-				return false;
-			}
-			p = endTimePos2;
-			int tempstampPosForEL = p * nEdge + edgeId;
-			next = p - max(bef[tempstampPosForEL], 1);
-			while (p >= endTimePos1) {
-				if (label != lab[tempstampPosForEL]) {
-
-					int stopP = max(next + 1, endTimePos1);
-
-					for (int tabu = p; tabu >= stopP; tabu--) {
-						if (expandMask[tabu - endTimePos1]) {
-							field--;
-							expandMask[tabu - endTimePos1] = false;
-							if (field == 0)break;
-						}
-					}
-				}
-				else {
-					sum = p - startTimePos + 1;
-					noiseNum = dif[tempstampPosForEL] - dif[tempPosForStartTime];
-					noiseLimit = Setting::delta * (sum - max(bef[tempstampPosForEL], 1));
-
-					if (MORE(noiseNum, noiseLimit)) {
-						minNoise = noiseLimit + Setting::delta;
-						if (noiseNum >= minNoise) {
-							checkNum = (noiseNum - minNoise) / Setting::delta;
-							if (EQ(round(checkNum), checkNum)) noiseT = next + (int)round(checkNum);
-							else noiseT = next + (int)checkNum + 1;
-
-							for (int tabu = min(noiseT, endTimePos2); tabu >= endTimePos1 && tabu >= next; tabu--) {
-								if (expandMask[tabu - endTimePos1]) {
-									field--;
-									expandMask[tabu - endTimePos1] = false;
-									if (field == 0)break;
-								}
-							}
-						}
-					}
-				}
-				if (field == 0)break;
-				p = next;
-				tempstampPosForEL = p * nEdge + edgeId;
-				if (p >= 0) next = p - max(bef[tempstampPosForEL], 1);
-			}
-			if (field == 0)break;
-		}
-	}
-
-	return field != 0;
-}
 #pragma endregion
 
 
 /*test whether a motif have all edges with same label in endpoints of interval*/
 void TGraphUDEL::checkMotifEndpointsD5(TMotifII*& motif) {
-	vec(int)* motifEdge = motif->getMotifEdge();
+	vec(int)* motifEdge;
+	motif->getMotifEdge(nullptr, motifEdge);
 
 	veciter(int) listEnd = motifEdge->end();
 	int startP = motif->getStartT() - startT;
 	int endP = motif->getEndT() - startT;
 	int startLab, endLab;
-	//vec(int)* maskEdge = motif->getMaskEdge();
-	//bool finded;
 	int noiseNum = 0, tempNoise, recordNoise;
 	int maxLeft = 0, minRight = 0x7fffffff;
 	for (auto iter = motifEdge->begin();
 		iter != listEnd; ++iter) {
-		//finded = Util::findItem(maskEdge, iter->id);
 
 		//check endpoint
 		startLab = getEdgeLabel(*iter, startP);

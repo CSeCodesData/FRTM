@@ -1,0 +1,34 @@
+graph : example-temporal-graph.txt
+graph : example-temporal-graph.txt
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 675629/675629;relaxed result cover: 653066/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 77763/675629;relaxed result cover: 83960/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 99613/675629;relaxed result cover: 103067/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 99587/675629;relaxed result cover: 103058/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 134115/675629;relaxed result cover: 142309/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 675629/675629;relaxed result cover: 653066/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 147849/675629;relaxed result cover: 156053/705580
+
+graph : example-temporal-graph.txt
+bj_noise50_04_3k10.txt finished
+original result covered: 675629/675629;relaxed result cover: 653066/705580
+

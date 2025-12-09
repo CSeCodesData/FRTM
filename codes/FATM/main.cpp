@@ -4,6 +4,8 @@
 #include"TGraphUDEL.h"
 #include"TMotif.h"
 
+#define TestMode
+
 #pragma region parameters initialization
 int FindTMotif::k = DEFAULT_K;
 long long FindTMotif::motifNumber = 0;
@@ -14,23 +16,25 @@ long long FindTMotif::motifMaxNum = 0;
 long long FindTMotif::motifSum = 0;
 //int FindTMotif::filterIntvSize = 0;
 //int FindTMotif::filterEdgeNumber = 0;
-//int FindTMotif::fixednode1 = -1;
-//int FindTMotif::fixednode2 = -1;
+//int FindTMotif::outputStartTime = -1;
+//int FindTMotif::outputStartTimeEnd = -1;
 int TGraph::posUsedForEdgeFilter = 0;
 int TGraph::posUsedForEdgeFilterShortIntv = 0;
 //int TGraph::saveEdgesControl = 0;
 AlgorithmType Setting::choice = AlgorithmType::INIT;//choose which algorithm to run
 long long Test::fproc, Test::compr, Test::gm, Test::gne;
 long long Test::ckf, Test::gmni, Test::gmli;
-clock_t Test::msTimer; 
 //long long Test::comprp1t = 0, Test::comprp2t = 0, Test::comprp1n = 0, Test::comprp2n = 0;
-long long Test::gne11 = 0, Test::gne121 = 0, Test::gne122 = 0;
-long long Test::gne211 = 0, Test::gne2121 = 0, Test::gne2122 = 0, Test::gne221 = 0, Test::gne222 = 0, Test::gnenonoise = 0;
+long long Test::gne11 = 0, Test::gne12 = 0, Test::gne121 = 0, Test::gne122 = 0;
+long long Test::gne211 = 0, Test::gne212 = 0, Test::gne2121 = 0, Test::gne2122 = 0, Test::gne221 = 0, Test::gne222 = 0, Test::gnenonoise = 0;
 long long Test::gnefield = 0, Test::gnemaxfield = 0;
+bool Test::useLimitedTime;
+clock_t Test::startTime;
 double Setting::delta = -1;
 int Setting::c = 0x7fffffff;
 int Setting::nodes = -1, Setting::edges = -1, Setting::allNTimestamp = -1;
-int Test::testingMode = 0;//testing mode
+//bool Setting::compressMode = false;
+ModeForTest Test::testingMode = ModeForTest::NOTEST;//testing mode
 long long Test::counter = 0;
 long long Test::counter2 = 0;
 long long Test::counter3 = 0;
@@ -39,6 +43,7 @@ long long Test::counter5 = 0;
 long long Test::counter6 = 0;
 long long Test::counter7 = 0;
 long long Test::counter8 = 0;
+long long Test::counter11 = 0;
 double Test::counter9 = 0;
 double Test::counter10 = 0;
 long long Test::sumIntvLen, Test::maxIntvLen;
@@ -54,7 +59,7 @@ void createTGraph(TGraph*& temporal_graph, const char* inputSrc, int indexId, in
 
 #pragma region which problem to run
 void runStaticAlgorithm(TGraph*& temporal_graph, bool*& fixLabel);
-void testD5(TGraph*& temporal_graph, bool*& fixLabel);
+void testD5(TGraph*& temporal_graph, bool*& fixLabel, char* motifFileRelax, char* motifFileNoRelax);
 void runIncrementalAlgorithm(TGraph*& temporal_graph, const char * src
 	, int graphEndT,bool*& fixLabel, int newEndT); 
 //void testStaticAlgorithm(TGraph*& temporal_graph/*, unordered_map<int, bool>& fixLabel*/);
@@ -71,11 +76,15 @@ void countingResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int result
 #pragma endregion
 
 void readK(vec(int)& arr, const char* file);
+void readMotifs(vector<tuple<int, int, unique_ptr<int[]>>>& arr, const char* file, vector<int>*& mapping);
+void checkMotifs(vector<tuple<int, int, unique_ptr<int[]>>>& arr, const char* file, vector<int>*& mapping, bool*& relax);
 
 #pragma region release memory
 void releaseResult(vec(TMotifI*)*& result, int len);
 void releaseResult(vec(TMotifII*)*& result, int len);
 #pragma endregion
+
+
 #pragma endregion 
 /////////////////////////////////////////////////////////////////////////////
 /*Input Parameters:
@@ -153,7 +162,6 @@ required: information of all edges are sorted by timestamp, and the interval of 
 */////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char* argv[]) {
-
 #pragma region parameter settings
 	char inputSrc[FILE_NAME_LENGTH] = INPUT_FILE;//input temporal graph file
 	char kFile[FILE_NAME_LENGTH] = K_FILE;//file of frequent conditon k
@@ -167,6 +175,7 @@ int main(int argc, char* argv[]) {
 	int newEndT = -1;// new end time of the temporal graph(after snapshot increasing)
 	vec(int) fixedK;// multiple frequent conditions
 	FindTMotif::isEdgeTypeFixed = false;//whether the edge label is fixed
+	char motifFileNoRelax[FILE_NAME_LENGTH], motifFileRelax[FILE_NAME_LENGTH];//for testing
 	//unordered_map<int, bool> fixedLabel;//record fixed labels for one edge
 #pragma endregion
 #pragma region load parameters
@@ -224,7 +233,7 @@ int main(int argc, char* argv[]) {
 			FindTMotif::output = STR2INT(argv[i] + 3);
 			break;
 		//case 's'://output the number of sub-connected components
-		//	TGraph::saveEdgesControl = STR2INT(argv[i] + 3);
+		//	Setting::compressMode = STR2BOOL(argv[i] + 3);
 		//	break;
 		//case 'p'://limit the minimum interval length of output motifs
 		//	FindTMotif::filterIntvSize = STR2INT(argv[i] + 3);
@@ -234,14 +243,20 @@ int main(int argc, char* argv[]) {
 		//	break;
 		//case 'q'://limlt output motifs with a specific edge
 		//	sep = (int)(find(argv[i] + 3, argv[i] + 3 + LINE_LENGTH, SEP_CHAR) - (argv[i] + 3));
-		//	FindTMotif::fixednode1 = STR2INT(argv[i] + 3);
-		//	FindTMotif::fixednode2 = STR2INT(argv[i] + 4 + sep);
+		//	FindTMotif::outputStartTime = STR2INT(argv[i] + 3);
+		//	FindTMotif::outputStartTimeEnd = STR2INT(argv[i] + 4 + sep);
 		//	break;
 		case 'r'://Choose Algorithm Id
 			Setting::choice = (AlgorithmType)STR2INT(argv[i] + 3);
 			break; 
 		case 'z'://testing mode
-			Test::testingMode = STR2INT(argv[i] + 3);
+			Test::testingMode = (ModeForTest)STR2INT(argv[i] + 3);
+			break;
+		case 'y'://result file with no relaxation parameters(used for testing)
+			strcpy(motifFileNoRelax, argv[i] + 3);
+			break;
+		case 'w'://result file with relaxation parameters(used for testing)
+			strcpy(motifFileRelax, argv[i] + 3);
 			break;
 		default://do nothing
 			break;
@@ -251,41 +266,48 @@ int main(int argc, char* argv[]) {
 	OUTPUT_FILE_OPEN
 	//argument setting
 	cout << "graph : " << inputSrc << endl;
-	readK(fixedK, kFile);
-	cout << "choice : " << Setting::choice << ",indexId : "<< indexId<< endl;
-	cout  << "global relaxation bound : " << Setting::delta << endl;
-	cout << "local relaxation bound : " << Setting::c << endl;
-	if (endT != -1) {
-		cout << "fixed end time : " <<  endT << endl;
+	if (Test::testingMode != ModeForTest::OVERLAPLEVEL) {
+		readK(fixedK, kFile);
+		cout << "choice : " << (int)Setting::choice << ",indexId : " << indexId << endl;
+		cout << "global relaxation bound : " << Setting::delta << endl;
+		cout << "local relaxation bound : " << Setting::c << endl;
+		if (endT != -1) {
+			cout << "fixed end time : " << endT << endl;
+		}
+		if (Setting::nodes == -1 || Setting::edges == -1 || Setting::allNTimestamp == -1) {
+			cout << "temporal graph information(the number of nodes, edges and snapshots) are needed" << endl;
+			return -1;
+		}
 	}
-	if (Setting::nodes == -1 || Setting::edges == -1 || Setting::allNTimestamp == -1) {
-		cout << "temporal graph information(the number of nodes, edges and snapshots) are needed" << endl;
-		return -1;
-	} 
 
 #pragma endregion
 
 #pragma region load graph
-	TGraph* temporal_graph;
-	createTGraph(temporal_graph, inputSrc, indexId, endT);
+	TGraph* temporal_graph = nullptr;
+	bool* fixedLabel = nullptr;
+	if (Test::testingMode != ModeForTest::OVERLAPLEVEL) {
+		createTGraph(temporal_graph, inputSrc, indexId, endT);
+
+		int labelN = temporal_graph->getNumOfLabel();
+		fixedLabel = DBG_NEW bool[labelN];//record fixed labels for one edge
+#pragma region load fixed label
+		if (FindTMotif::isEdgeTypeFixed) {
+			cout << "fixed label of edge : ";
+			for (int i = 0; i < labelN; i++) {
+				fixedLabel[i] = false;
+			}
+			temporal_graph->readFixedLabel(fixedLabel, fixedLabelFile, FindTMotif::isEdgeTypeFixed);
+		}
+		else {
+			for (int i = 0; i < labelN; i++) {
+				fixedLabel[i] = true;
+			}
+		}
+#pragma endregion
+	}
 #pragma endregion
 
-	int labelN = temporal_graph->getNumOfLabel();
-	bool* fixedLabel = DBG_NEW bool[labelN];//record fixed labels for one edge
-#pragma region load fixed label
-	if (FindTMotif::isEdgeTypeFixed) {
-		cout << "fixed label of edge : ";
-		for (int i = 0; i < labelN; i++) {
-			fixedLabel[i] = false;
-		}
-		temporal_graph->readFixedLabel(fixedLabel, fixedLabelFile, FindTMotif::isEdgeTypeFixed);
-	}
-	else {
-		for (int i = 0; i < labelN; i++) {
-			fixedLabel[i] = true;
-		}
-	}
-#pragma endregion
+	
 
 #pragma region run the algorithm
 	switch (Setting::choice) {
@@ -304,11 +326,14 @@ int main(int argc, char* argv[]) {
 		FindTMotif::output = 0;
 		break;
 	case AlgorithmType::TESTING:
-		for (auto iter = fixedK.begin(); iter != fixedK.end(); ++iter) {
-			FindTMotif::k = *iter;
-			cout << "k : " << *iter << endl;
-			testD5(temporal_graph, fixedLabel);
+		if (Test::testingMode != ModeForTest::OVERLAPLEVEL) {
+			for (auto iter = fixedK.begin(); iter != fixedK.end(); ++iter) {
+				FindTMotif::k = *iter;
+				cout << "k : " << *iter << endl;
+				testD5(temporal_graph, fixedLabel, motifFileRelax, motifFileNoRelax);
+			}
 		}
+		else testD5(temporal_graph, fixedLabel, motifFileRelax, motifFileNoRelax);
 		break;
 	case AlgorithmType::DFRTM: 
 	case AlgorithmType::DFRTMOPT1: 
@@ -374,53 +399,57 @@ void runStaticAlgorithm(TGraph*& temporal_graph, bool*& fixLabel) {
 	int resultLen = (nTimestamps - FindTMotif::k + 2)
 		*(nTimestamps - FindTMotif::k + 1) >> 1;
 	vec(TMotifII*)* res = nullptr;//used for LIMITEDFIXNUM and PROPORTION
-	//vec(TMotifLM*)* res2LM = nullptr;//used for LIMITEDFIXNUM and PROPORTION
 	FindTMotif::motifNumber = 0;
 	res = DBG_NEW vec(TMotifII*)[resultLen];
 #pragma endregion 
 #pragma endregion
-	Test::counter = Test::counter2 = Test::counter3 = Test::counter4 = Test::counter5 = 0;
+	Test::counter = Test::counter2 = Test::counter3 = Test::counter4 = Test::counter5 = Test::counter6 = Test::counter7 = 0;
 	Test::fproc = Test::gne = Test::gm = Test::compr = 0;
 	Test::peakMemory = 0;
 	cout << "before algorithm: "; Test::showMemoryUse();
 	int startT = temporal_graph->getStartT(), endT = temporal_graph->getEndT();
-	BEGIN_TIMER(startTime)
+	Test::useLimitedTime = true;
+	Test::startTime = clock();
 	switch (Setting::choice) {
 		case AlgorithmType::FRTM:
-			FindRTMotif::FRTM(temporal_graph, res, fixLabel); 
+			FindRTMotif::FRTM(temporal_graph, res, fixLabel, startT, endT, false, ComponentsType::CCFRTM);
 			break;
 		case AlgorithmType::FRTMFORDYN: 
-			FindRTMotif::FRTMDYN(temporal_graph, res, fixLabel, startT, endT); 
+			FindRTMotif::FRTM(temporal_graph, res, fixLabel, startT, endT, true, ComponentsType::CCFRTM);
 			break;
 		case AlgorithmType::FRTMOPT1: 
-			FindRTMotif::FRTMOpt1(temporal_graph, res, fixLabel); break;
+			FindRTMotif::FRTMOpt1(temporal_graph, res, fixLabel, startT, endT, false, ComponentsTypeOPT1);
+			break;
 		case AlgorithmType::FRTMOPT1DYN: 
-			FindRTMotif::FRTMOpt1DYN(temporal_graph, res, fixLabel, startT, endT);
+			FindRTMotif::FRTMOpt1(temporal_graph, res, fixLabel, startT, endT, true, ComponentsTypeOPT1);
 			break;
 		case AlgorithmType::FRTMPLUS:
-			FindRTMotif::FRTMPlus(temporal_graph, res, fixLabel);
+			FindRTMotif::FRTMPlus(temporal_graph, res, fixLabel, startT, endT, false, ComponentsTypeOPT1);
 			break;
 		case AlgorithmType::FRTMPLUSDYN:
-			FindRTMotif::FRTMPlusDYN(temporal_graph, res, fixLabel, startT, endT);
+			FindRTMotif::FRTMPlus(temporal_graph, res, fixLabel, startT, endT, true, ComponentsTypeOPT1);
 			break;
 	}
-	auto allTime = END_TIMER(startTime);
-
-	//cout << Test::counter << " " << Test::counter2 <<  " " << Test::counter3 << " " << Test::counter4 << " " << Test::counter5 << endl;
+	auto allTime = END_TIMER(Test::startTime);
+	/*if (Test::counter3 != 0) {
+		cout << Test::counter << " " << Test::counter2 << " " << Test::counter3 << " " << Test::counter4 << " " <<
+			Test::counter5 << " " << Test::counter6 << " " << Test::counter7 << " " << Test::counter8 << " " << 
+			Test::counter9 << " "<< Test::counter10<< " "<< Test::counter11<<endl;
+	}*/
 	#ifdef _USENSTIMER
 		cout << "fproc: "<< Test::fproc<<"ns, compr: " << Test::compr << "ns, gm: " << Test::gm << "ns, gne: " << Test::gne << "ns" << endl;
 	#else
 		cout << "fproc: " << Test::fproc << "ms, compr: " << Test::compr << "ms, gm: " << Test::gm << "ms, gne: " << Test::gne << "ms" << endl;
 	#endif // _USENSTIMER
 
+#ifdef TestMode
 	cout << "gne11: " << Test::gne11 << " gne121: " << Test::gne121 << " gne122: " << Test::gne122
 		<< " gne211: " << Test::gne211 << " gne2121: " << Test::gne2121 << " gne2122: " << Test::gne2122
 		<< " gne221: " << Test::gne221 << " gne222: " << Test::gne222 << " gnenonoise: " << Test::gnenonoise
 		<<  " gnefield: " << Test::gnefield*1.0/(Test::gne11 + Test::gne121 + Test::gne122 + Test::gne211+ Test::gne2121 +
 			Test::gne2122+ Test::gne221 + Test::gne222 + Test::gnenonoise)
 		<<  " gnemaxfield: " << Test::gnemaxfield << endl;
-	//cout << Test::counter*1.0 /1000 << endl;
-	//cout << Test::counter6 << " "<< Test::counter3 << " " << Test::counter7 << " " << Test::counter5 << endl;
+#endif
 	#ifdef _USENSTIMER
 		cout << "time: " << allTime << "ns" << endl;
 	#else
@@ -428,10 +457,11 @@ void runStaticAlgorithm(TGraph*& temporal_graph, bool*& fixLabel) {
 	#endif // _USENSTIMER
 
 	outputResult(temporal_graph, res, resultLen);
-	releaseResult(res, resultLen);//release the memory
+	//releaseResult(res, resultLen);//release the memory
 	
-	cout << "release result: ";
-	Test::showMemoryUse(); cout << "\n";
+	//cout << "release result: ";
+	//Test::showMemoryUse(); 
+	cout << "\n";
 	exit(0);
 }
 #pragma endregion
@@ -452,23 +482,20 @@ void runIncrementalAlgorithm(TGraph*& temporal_graph, const char * src
 	
 	int startT = temporal_graph->getStartT(), endT = graphEndT;
 #pragma region get original result of general case
+	Test::useLimitedTime = false;
 	BEGIN_TIMER(startTime)
 	switch (Setting::choice) {
 		case AlgorithmType::DFRTM:
-			FindRTMotif::FRTMDYN(temporal_graph, result, fixLabel, 0, graphEndT);
+			FindRTMotif::FRTM(temporal_graph, result, fixLabel, startT, graphEndT, true,  ComponentsType::CCFRTM);
 			break;
 		case AlgorithmType::DFRTMOPT1:
-			FindRTMotif::FRTMOpt1DYN(temporal_graph, result, fixLabel, 0, graphEndT);
+			FindRTMotif::FRTMOpt1(temporal_graph, result, fixLabel, startT, graphEndT, true, ComponentsTypeOPT1);
 			break;
 		case AlgorithmType::DFRTMPLUS:
-			FindRTMotif::FRTMPlusDYN(temporal_graph, result, fixLabel, 0, graphEndT);
+			FindRTMotif::FRTMPlus(temporal_graph, result, fixLabel, startT, graphEndT, true, ComponentsTypeOPT1);
 			break;
 	}
-	#ifdef _USENSTIMER
-			cout << "gctime: " << END_TIMER(startTime) << "ns" << endl;
-	#else
-			cout << "gctime: " << END_TIMER(startTime) << "ms" << endl;
-	#endif // _USENSTIMER
+	cout << "gctime: " << END_TIMER(startTime) << "ms" << endl;
 	temporal_graph->showMidResult(result);
 #pragma endregion
 	cout << "middle memory: ";
@@ -485,23 +512,20 @@ void runIncrementalAlgorithm(TGraph*& temporal_graph, const char * src
 	Test::peakMemory = 0;
 	cout << "before algorithm: "; Test::showMemoryUse();
 #pragma endregion
-	BEGIN_TIMER(incTime)
+	Test::useLimitedTime = true;
+	Test::startTime = clock();
 	switch (Setting::choice) {
 	case AlgorithmType::DFRTM:
-		FindRTMotif::DFRTM(temporal_graph, result, fixLabel, graphEndT/*, methodid*/);
+		FindRTMotif::DFRTM(temporal_graph, result, fixLabel, graphEndT, ComponentsType::CCFRTM);
 		break;
 	case AlgorithmType::DFRTMOPT1:
-		FindRTMotif::DFRTMOpt1(temporal_graph, result, fixLabel, graphEndT/*, methodid*/);
+		FindRTMotif::DFRTMOpt1(temporal_graph, result, fixLabel, graphEndT, ComponentsTypeOPT1);
 		break;
 	case AlgorithmType::DFRTMPLUS:
-		FindRTMotif::DFRTMPLus(temporal_graph, result, fixLabel, graphEndT);
+		FindRTMotif::DFRTMPLus(temporal_graph, result, fixLabel, graphEndT, ComponentsTypeOPT1);
 		break;
 	}
-	#ifdef _USENSTIMER
-		cout << "inctime: " << END_TIMER(incTime) << "ns" << endl;
-	#else
-		cout << "inctime: " << END_TIMER(incTime) << "ms" << endl;
-	#endif // _USENSTIMER
+	cout << "inctime: " << END_TIMER(Test::startTime) << "ms" << endl;
 
 	outputResult(temporal_graph, result, resultLen);
 	releaseResult(result, resultLen);
@@ -516,14 +540,14 @@ void runIncrementalAlgorithm(TGraph*& temporal_graph, const char * src
 #pragma endregion 
 
 #pragma region test
-void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
-#pragma region initialzation
-	int nTimestamps = temporal_graph->getCurrNTimestamp();
-#pragma region final result
-	int resultLen = (nTimestamps - FindTMotif::k + 2)
-		*(nTimestamps - FindTMotif::k + 1) >> 1;
+void testD5(TGraph*& temporal_graph, bool*& fixLabel, char* motifFileRelax,char* motifFileNoRelax) {
+	int resultLen, nTimestamps;
+	if (Test::testingMode != ModeForTest::OVERLAPLEVEL) { 
+		nTimestamps = temporal_graph->getCurrNTimestamp();
+		resultLen = (nTimestamps - FindTMotif::k + 2) * (nTimestamps - FindTMotif::k + 1) >> 1;
+	}
 	long long motifNum1, motifNum2;
-	if (Test::testingMode == 2) {//compare with original motifs
+	if (Test::testingMode == ModeForTest::COMPRORI) {//compare with original motifs
 		vec(TMotifI*)* res = DBG_NEW vec(TMotifI*)[resultLen];//used for exact label matches
 		vec(TMotifII*)* res2 = DBG_NEW vec(TMotifII*)[resultLen];//used for label mismatches
 		int startT = temporal_graph->getStartT(), endT = temporal_graph->getEndT();
@@ -544,7 +568,7 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 		temporal_graph->resetStruct();
 		FindTMotif::motifNumber = 0;
 		BEGIN_TIMER(compareTime)
-		FindRTMotif::FRTMOpt1(temporal_graph, res2, fixLabel);
+		FindRTMotif::FRTMOpt1(temporal_graph, res2, fixLabel, startT, endT, false, ComponentsTypeOPT1);
 		motifNum2 = FindTMotif::motifNumber;
 		#ifdef _USENSTIMER
 			cout << "time: " << END_TIMER(compareTime) << "ns, new motif number: " << motifNum2 << endl;
@@ -553,7 +577,7 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 		#endif // _USENSTIMER
 		compareResult(temporal_graph, res, res2, resultLen, motifNum1, motifNum2);
 	}
-	else if (Test::testingMode == 3) {//counting overlapped
+	else if (Test::testingMode == ModeForTest::OVERLAPCOUNT) {//counting overlapped
 		vec(TMotifII*)* res2 = DBG_NEW vec(TMotifII*)[resultLen];//used for LIMITEDFIXNUM and PROPORTION
 		int startT = temporal_graph->getStartT(), endT = temporal_graph->getEndT();
 		FindTMotif::motifNumber = 0;
@@ -564,12 +588,12 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 		Test::peakMemory = 0;
 		FindTMotif::motifNumber = 0;
 		Setting::c = 0x7fffffff;//not limited
-		FindRTMotif::FRTMOpt1(temporal_graph, res2, fixLabel); 
+		FindRTMotif::FRTMOpt1(temporal_graph, res2, fixLabel, startT, endT, false, ComponentsTypeOPT1);
 		motifNum2 = FindTMotif::motifNumber;
 		cout << "motif number: " << FindTMotif::motifNumber << endl;
 		//countingResult(temporal_graph, res, resultLen, motifNum2);
 	}
-	else if (Test::testingMode == 4) {//compare with c = inf
+	else if (Test::testingMode == ModeForTest::COMPRINF) {//compare with c = inf
 		vec(TMotifII*)* res = DBG_NEW vec(TMotifII*)[resultLen];//used for precise method and GLOBALFIXNUM
 		vec(TMotifII*)* res2 = DBG_NEW vec(TMotifII*)[resultLen];//used for LIMITEDFIXNUM and PROPORTION
 		int startT = temporal_graph->getStartT(), endT = temporal_graph->getEndT();
@@ -581,7 +605,7 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 		BEGIN_TIMER(startTime)
 		int tempC = Setting::c;
 		Setting::c = 0x7fffffff;//not limited
-		FindRTMotif::FRTMPlus(temporal_graph, res, fixLabel);
+		FindRTMotif::FRTMPlus(temporal_graph, res, fixLabel, startT, endT, false, ComponentsTypeOPT1);
 		motifNum1 = FindTMotif::motifNumber;
 		#ifdef _USENSTIMER
 			cout << "time: " << END_TIMER(startTime) << "ns, original motif number: " << motifNum1 << endl;
@@ -592,7 +616,7 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 		FindTMotif::motifNumber = 0;
 		BEGIN_TIMER(compareTime)
 		Setting::c = tempC;
-		FindRTMotif::FRTMPlus(temporal_graph, res2, fixLabel);
+		FindRTMotif::FRTMPlus(temporal_graph, res2, fixLabel, startT, endT, false, ComponentsTypeOPT1);
 		motifNum2 = FindTMotif::motifNumber;
 		#ifdef _USENSTIMER
 			cout << "time: " << END_TIMER(compareTime) << "ns, new motif number: " << motifNum2 << endl;
@@ -600,6 +624,16 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 			cout << "time: " << END_TIMER(compareTime) << "ms, new motif number: " << motifNum2 << endl;
 		#endif // _USENSTIMER
 		compareResult(temporal_graph, res, res2, resultLen, motifNum1, motifNum2);
+	}
+	else if (Test::testingMode == ModeForTest::OVERLAPLEVEL) {
+		vector<tuple<int, int, unique_ptr<int[]>>> resRelax;
+		auto mapping = DBG_NEW vector<int>[Setting::edges];
+		readMotifs(resRelax, motifFileRelax, mapping);
+		const int size = resRelax.size();
+		bool* relax = DBG_NEW bool[size];
+		CLEARALL(relax, false, size, bool);
+		checkMotifs(resRelax, motifFileNoRelax, mapping, relax);
+		
 	}
 	cout << "\n";
 	exit(0);
@@ -609,66 +643,6 @@ void testD5(TGraph*& temporal_graph, bool*& fixLabel) {
 
 
 #pragma region output
-//void outputResult(TGraph*& temporal_graph, vec(TMotifI*)*& result, int resultLen) {
-//	veciter(TMotifI*) iter;
-//	TMotifI* motif;
-//	size_t size;
-//	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
-//	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
-//	for (int i = 0; i < resultLen; i++) {
-//		size = result[i].size();
-//		if (size == 0) continue;
-//		iter = result[i].begin();
-//		motif = (TMotifI*) *iter;
-//		//if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
-//		/*cout << "startT: " << motif->getStartT()
-//			<< "\tendT: " << motif->getEndT() << endl;
-//		cout << MOTIF_NUM << size << endl;
-//		*/
-//		//if (motif->getStartT() == 0 && motif->getEndT() == 119 )FindTMotif::output = 2;
-//		if (FindTMotif::output >= 1) {
-//			cout << MOTIF_NUM << size << endl;
-//			cout << "startT: " << motif->getStartT()
-//				<< "\tendT: " << motif->getEndT() << endl;
-//		}
-//		FindTMotif::print(temporal_graph,
-//			result, i, false);
-//		//if (motif->getStartT() == 0 && motif->getEndT() == 119) { FindTMotif::output = 0; exit(0); }
-//	}
-//
-//	cout << "motif max edges num: " << FindTMotif::motifMaxNum <<
-//		"\tmotif avg edges num: " << FindTMotif::motifSum * 1.0 / FindTMotif::motifNumber << endl;
-//	cout << "motif max intverval length: " << Test::maxIntvLen <<
-//		"\tmotif avg intverval length: " << Test::sumIntvLen * 1.0 / FindTMotif::motifNumber << endl;
-//	cout << "sum: " << FindTMotif::motifNumber << endl;
-//
-//	//cout << "counter: " << Test::counter << endl;
-//	/*if (FindTMotif::output == 3) {
-//		cout << "-------------------------------------------------------" << endl;
-//		for (int i = 0; i < resultLen; i++) {
-//			size = result[i].size();
-//			if (size == 0) continue;
-//			iter = result[i].begin();
-//			motif = *iter;
-//			if (motif->getEndT() - motif->getStartT() + 1 < FindTMotif::filterIntvSize) continue;
-//			cout << MOTIF_NUM << size << endl;
-//			cout << "startT: " << motif->getStartT()
-//				<< "\tendT: " << motif->getEndT() << endl;
-//			FindTMotif::printRealLabel(temporal_graph, result[i]);
-//		}
-//	}*/
-//
-//	cout << "after algorithm: "; Test::showPeakMemoryUse();
-//	Test::showRealPeakMemoryUse();
-//
-//	/*if (Test::testingMode) {
-//		if (Test::globalApproType && Test::globalApproType != 1)
-//			testOverlap(temporal_graph, res);
-//		if(Test::globalApproType && (Test::globalApproType == 1 || Test::globalApproType == 3))
-//			testLabel(temporal_graph, res);
-//		showTesting();
-//	}*/
-//}
 void outputResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int resultLen) {
 	veciter(TMotifII*) iter;
 	TMotifII* motif;
@@ -685,18 +659,16 @@ void outputResult(TGraph*& temporal_graph, vec(TMotifII*)*& result, int resultLe
 			<< "\tendT: " << motif->getEndT() << endl;
 		cout << MOTIF_NUM << size << endl;
 		*/
-		//if (motif->getStartT() == 736 && motif->getEndT() == 801)FindTMotif::output = 2;
-
-		if (FindTMotif::output >= 1) {
-			cout << MOTIF_NUM << size << endl;
-			cout << "startT: " << motif->getStartT()
-				<< "\tendT: " << motif->getEndT() << endl;
-		}
-		FindTMotif::print(temporal_graph,
-			result, i, false);
-		//if (motif->getStartT() == 736 && motif->getEndT() == 801) { FindTMotif::output = 0; }
-		
-		//if(motif->getStartT() == 1 )exit(0);
+		//if (motif->getStartT() == 1) exit(0);
+		//if (motif->getStartT() == 0 && motif->getEndT() >= 90) {
+			if (FindTMotif::output >= 1) {
+				cout << MOTIF_NUM << size << endl;
+				cout << "startT: " << motif->getStartT()
+					<< "\tendT: " << motif->getEndT() << endl;
+			}
+			FindTMotif::print(temporal_graph,
+				result, i, false);
+		//}
 		
 		//testing
 		/*if (Test::testingMode == 1 && Setting::globalApproType == 5) {
@@ -741,7 +713,8 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifI*)*& result1, vec(TMotifI
 	int graphStartT = temporal_graph->getStartT(), graphEndT = temporal_graph->getEndT();
 	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
 	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
-	EdgeIdArray* edgesList2, *newedgesList1;
+	EdgeIdArray motifEdge1, motifEdge2;
+	EdgeIdArray* edgesList2 = &motifEdge1, *newedgesList1 = &motifEdge2;
 	vec(int) edgesList1;
 	vec(TMotifII*)* res = DBG_NEW vec(TMotifII*)[resultLen];
 	int allcontainedmotif = 0, allcontainmotif = 0, allcontain1motif = 0;
@@ -772,10 +745,10 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifI*)*& result1, vec(TMotifI
 		for (int num2 = 1; iter2 != iter2End; ++iter2,++num2) {
 			motif2 = (TMotifII*)*iter2;
 
-			//if (motif2->getSize() > 50) continue;//filter for case study
+			if (motif2->getSize() > 50) continue;//filter for case study
 
 			motif2->sortEdges();
-			edgesList2 = motif2->getMotifEdge();
+			motif2->getMotifEdge(result2, edgesList2);
 
 			auto edgesBegin2 = edgesList2->begin(), edgesEnd2 = edgesList2->end();
 			int startT = motif2->getStartT(), endT = motif2->getEndT();
@@ -794,8 +767,8 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifI*)*& result1, vec(TMotifI
 					newiter1End = res[resultPos].end();
 					for (int num1 = 1; newiter1 != newiter1End; ++newiter1, ++num1) {
 						newmotif1 = (TMotifII*)*newiter1;
-						//if (newmotif1->getSize() > 50) continue;//filter for case study
-						newedgesList1 = newmotif1->getMotifEdge();
+						if (newmotif1->getSize() > 50) continue;//filter for case study
+						newmotif1->getMotifEdge(res, newedgesList1);
 						
 						auto edgeiter1 = newedgesList1->begin(), edgesEnd1 = newedgesList1->end();
 						auto edgeiter2 = edgesBegin2;
@@ -842,7 +815,8 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifII*)*& result1, vec(TMotif
 	int graphStartT = temporal_graph->getStartT(), graphEndT = temporal_graph->getEndT();
 	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
 	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
-	EdgeIdArray* edgesList2, *newedgesList1;
+	EdgeIdArray motifEdge1, motifEdge2;
+	EdgeIdArray* edgesList2 = &motifEdge1, *newedgesList1 = &motifEdge2;
 	vec(int) edgesList1;
 	vec(TMotifII*)* res = DBG_NEW vec(TMotifII*)[resultLen];
 	int allcontainedmotif = 0, allcontainmotif = 0, allcontain1motif = 0;
@@ -855,7 +829,8 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifII*)*& result1, vec(TMotif
 			motif1 = (TMotifII*)*iter1;
 
 			edgesList1.clear();
-			edgesList1.insert(edgesList1.begin(),motif1->getMotifEdge()->begin(), motif1->getMotifEdge()->end());
+			motif1->getMotifEdge(result1, edgesList2);
+			edgesList1.insert(edgesList1.begin(), edgesList2->begin(), edgesList2->end());
 			sort(edgesList1.begin(), edgesList1.end());
 			res[i].emplace_back(DBG_NEW TMotifII(edgesList1, motif1->getStartT(), motif1->getEndT()));
 
@@ -873,7 +848,7 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifII*)*& result1, vec(TMotif
 		for (int num2 = 1; iter2 != iter2End; ++iter2,++num2) {
 			motif2 = (TMotifII*)*iter2;
 			motif2->sortEdges();
-			edgesList2 = motif2->getMotifEdge();
+			motif2->getMotifEdge(result2,edgesList2);
 
 			auto edgesBegin2 = edgesList2->begin(), edgesEnd2 = edgesList2->end();
 			int startT = motif2->getStartT(), endT = motif2->getEndT();
@@ -891,7 +866,7 @@ void compareResult(TGraph*& temporal_graph, vec(TMotifII*)*& result1, vec(TMotif
 					newiter1End = res[resultPos].end();
 					for (int num1 = 1; newiter1 != newiter1End; ++newiter1, ++num1) {
 						newmotif1 = (TMotifII*)*newiter1;
-						newedgesList1 = newmotif1->getMotifEdge();
+						newmotif1->getMotifEdge(res, newedgesList1);
 						
 						auto edgeiter1 = newedgesList1->begin(), edgesEnd1 = newedgesList1->end();
 						auto edgeiter2 = edgesBegin2;
@@ -934,8 +909,9 @@ void countingResult(TGraph*& temporal_graph, vec(TMotifII*)*& result2, int resul
 	size_t size1, size2;
 	FindTMotif::motifMaxNum = FindTMotif::motifSum = 0;
 	Test::maxIntvLen = 0, Test::sumIntvLen = 0;
-	EdgeIdArray* edgesList1, *edgesList2;
-	int graphStartT = temporal_graph->getStartT(), graphEndT = temporal_graph->getEndT(); 
+	EdgeIdArray motifEdge1, motifEdge2;
+	EdgeIdArray* edgesList1 = &motifEdge1, *edgesList2 = &motifEdge2;
+	int graphStartT = temporal_graph->getStartT(), graphEndT = temporal_graph->getEndT();
 	int allcontainedmotif = 0, allcontainmotif = 0;
 	for (int i = 0; i < resultLen; i++) {
 		size2 = result2[i].size();
@@ -954,13 +930,12 @@ void countingResult(TGraph*& temporal_graph, vec(TMotifII*)*& result2, int resul
 		iter2End = result2[i].end();
 		for (int num2 = 1; iter2 != iter2End; ++iter2, ++num2) {
 			motif2 = (TMotifII*)*iter2;
-			edgesList2 = motif2->getMotifEdge();
-			auto edgesBegin2 = edgesList2->begin(), edgesEnd2 = edgesList2->end();
 			int startT = motif2->getStartT(), endT = motif2->getEndT();
 			int snapshot2 = endT - startT + 1;
 			double gap = snapshot2 * Setting::delta/(1 - Setting::delta);
 			if (LESS(gap,FindTMotif::k)) break;
-			edgesList2 = motif2->getMotifEdge();
+			motif2->getMotifEdge(result2, edgesList2);
+			auto edgesBegin2 = edgesList2->begin(), edgesEnd2 = edgesList2->end();
 			int stopST = endT - FindTMotif::k;
 			int contain = 0;
 
@@ -976,7 +951,7 @@ void countingResult(TGraph*& temporal_graph, vec(TMotifII*)*& result2, int resul
 					iter1End = result2[resultPos].end();
 					for (int num1 = 1; iter1 != iter1End; ++iter1, ++num1) {
 						motif1 = (TMotifII*)*iter1;
-						edgesList1 = motif1->getMotifEdge();
+						motif1->getMotifEdge(result2, edgesList1);
 
 						auto edgeiter1 = edgesList1->begin(), edgesEnd1 = edgesList1->end();
 						auto edgeiter2 = edgesBegin2;
@@ -1053,6 +1028,128 @@ void readK(vec(int)& arr, const char* file) {
 	}
 }
 
+void readMotifs(vector<tuple<int, int, unique_ptr<int[]>>>& arr, const char* file, vector<int>*& mapping) {
+	FILE* f;
+	f = fopen(file, "r+");
+	if (!f) {
+		exit(-1);
+	}
+	else {
+		const int LINEN = 1800000;
+		char* line = DBG_NEW char[LINEN];
+		CLEARALL(line, 0, LINEN, char);
+		int startT = -1, endT = -1, edgeN = 0;
+		
+		while (fgets(line, LINEN, f)) {
+			if (strlen(line) == 0) continue;
+			if (strlen(line) > 2 && line[0] == 's' && line[1] == 't') {//startT: d+\tendT: d+
+				startT = STR2INT(line + 8);
+				auto sep1 = (int)(find(line, line + LINEN, '\t') - line);
+				endT = STR2INT(line + sep1 + 6);
+			}
+			else if (strlen(line) > 2 && line[0] == 'E') {
+				edgeN = STR2INT(line + 1);
+			}
+			else if (edgeN != 0) {
+				unique_ptr<int[]> edges = make_unique<int[]>(edgeN);
+				int counter = 0;
+				char* token = strtok(line, ",");
+				int pos = arr.size();
+				while (token != nullptr && counter < edgeN) {
+					int e = STR2INT(token);
+					edges[counter++] = e;
+					mapping[e].emplace_back(pos);
+					token = strtok(nullptr, ",");
+				}
+				sort(edges.get(), edges.get() + edgeN);
+				arr.emplace_back(startT, endT, move(edges));
+				edgeN = 0;
+			}
+		}
+		fclose(f);
+		cout << file << " finished" << endl;
+	}
+}
+void checkMotifs(vector<tuple<int, int, unique_ptr<int[]>>>& arr, const char* file, vector<int>*& mapping, bool*& relax) {
+	FILE* f;
+	f = fopen(file, "r+");
+	if (!f) {
+		exit(-1);
+	}
+	else {
+		const int LINEN = 1800000;
+		char* line = DBG_NEW char[LINEN];
+		CLEARALL(line, 0, LINEN, char);
+		int startT = -1, endT = -1, edgeN = 0;
+		int coveredOri = 0, coverRelax = 0, same = 0, oriNum = 0;
+
+		while (fgets(line, LINEN, f)) {
+			if (strlen(line) == 0) continue;
+			if (strlen(line) > 2 && line[0] == 's' && line[1] == 't') {//startT: d+\tendT: d+
+				startT = STR2INT(line + 8);
+				auto sep1 = (int)(find(line, line + LINEN, '\t') - line);
+				endT = STR2INT(line + sep1 + 6);
+			}
+			else if (strlen(line) > 2 && line[0] == 'E') {
+				edgeN = STR2INT(line + 1);
+			}
+			else if (edgeN != 0) {
+				unique_ptr<int[]> edges = make_unique<int[]>(edgeN);
+				int counter = 0;
+				char* token = strtok(line, ",");
+				int pos = arr.size();
+				int minN = 0x7fffffff, minE = -1;
+				while (token != nullptr && counter < edgeN) {
+					int e = STR2INT(token);
+					edges[counter++] = e;
+					if (minN > mapping[e].size()) {
+						minN = mapping[e].size();
+						minE = e;
+					}
+					token = strtok(nullptr, ",");
+				}
+				sort(edges.get(), edges.get() + edgeN);
+				oriNum++;
+				bool coverFlag = false;
+				for (auto motif : mapping[minE]) {
+					auto& [stRelax, etRelax, edgesRelax] = arr[motif];
+					if (startT < stRelax || endT > etRelax) continue;
+					int edgesRN = (int)_msize(edgesRelax.get()) / sizeof(int);
+					if (edgeN > edgesRN) continue;
+					int oiter = 0, riter = 0;
+					while (oiter < edgeN && riter < edgesRN) {
+						if (edges[oiter] == edgesRelax[riter]) {
+							oiter++;
+						}
+						else if (edges[oiter] < edgesRelax[riter]) {
+							break;
+						}
+						riter++;
+					}
+					if (oiter == edgeN) {
+						coverFlag = true;
+						if (riter == edgesRN && startT == stRelax && endT == etRelax) {
+							same++;
+						}
+						if (!relax[motif]) {
+							coverRelax++;
+							relax[motif] = true;
+						}
+					}
+				}
+				if (coverFlag) {
+					coveredOri++;
+				}
+				edgeN = 0;
+			}
+		}
+		fclose(f);
+
+		cout << "original result covered: " << coveredOri << "/" << oriNum << ";" <<
+			"relaxed result cover: " << coverRelax << "/" << arr.size() <<
+			"same number: " << same <<  endl;
+	}
+}
 
 #pragma endregion
 

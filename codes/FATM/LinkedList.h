@@ -166,11 +166,11 @@ public:
 
 /*one header of a link list*/
 template<typename Y>
-struct DoublyLinkedList {
+class DoublyLinkedList {
 public:
 	DoublyLinkedList() :/*length(0),*/first(nullptr), tail(nullptr) {}
 
-	void addNodeAtFirst(DoublyLinkedNode<Y>*& node) {
+	virtual void addNodeAtFirst(DoublyLinkedNode<Y>*& node) {
 		//if (length == 0)tail = node;
 		if (first == nullptr) tail = node;
 		else first->pre = node;
@@ -179,7 +179,7 @@ public:
 		//length++;
 	}
 
-	void addNodeAft(DoublyLinkedNode<Y>*& pos, Y&& item) {
+	virtual void addNodeAft(DoublyLinkedNode<Y>*& pos, Y&& item) {
 		DoublyLinkedNode<Y>* node = DBG_NEW DoublyLinkedNode<Y>(item);
 		node->next = pos->next;
 		if (pos->next != nullptr) pos->next->pre = node;
@@ -188,7 +188,7 @@ public:
 		if (tail == pos) tail = node;
 	}
 
-	void moveTo(DoublyLinkedNode<Y>*& pos, DoublyLinkedNode<Y>*& moved) {
+	virtual void moveTo(DoublyLinkedNode<Y>*& pos, DoublyLinkedNode<Y>*& moved) {
 		
 		auto pre = moved->pre;
 		if (pre != nullptr) pre->next = moved->next;
@@ -203,7 +203,7 @@ public:
 		moved->pre = pos;
 	}
 
-	void addNodeAtLast(DoublyLinkedNode<Y>*& node) {
+	virtual void addNodeAtLast(DoublyLinkedNode<Y>*& node) {
 		//if (length == 0)tail = node;
 		if (tail == nullptr) first = node;
 		else tail->next = node;
@@ -233,21 +233,21 @@ public:
 	}
 
 	//add the link list with header head(remove the head after adding)
-	void addChain(DoublyLinkedList<Y>*& head) {
-		if (head->tail == nullptr)return;
-		//if (head->length == 0)return;
-		if (tail == nullptr)tail = head->tail;
-		else //first!=nullptr
-			first->pre = head->tail;
-		//if (length == 0)tail = head->tail;
-		head->tail->next = first;
-		first = head->next;
-		//length += head->length;
-		head->next = nullptr;//for delete
-	}
+	//virtual void addChain(DoublyLinkedList<Y>*& head) {
+	//	if (head->tail == nullptr)return;
+	//	//if (head->length == 0)return;
+	//	if (tail == nullptr)tail = head->tail;
+	//	else //first!=nullptr
+	//		first->pre = head->tail;
+	//	//if (length == 0)tail = head->tail;
+	//	head->tail->next = first;
+	//	first = head->next;
+	//	//length += head->length;
+	//	head->next = nullptr;//for delete
+	//}
 
 	//delete node after the current node
-	void deleteNextNode(DoublyLinkedNode<Y>*& node) {
+	virtual void deleteNextNode(DoublyLinkedNode<Y>*& node) {
 		DoublyLinkedNode<Y>* one = node->next;
 		if (one == nullptr)return;
 		node->next = one->next;
@@ -256,9 +256,16 @@ public:
 		delete one;
 		//length -= 1;
 	}
-
+	virtual void combineNextNode(DoublyLinkedNode<Y>*& node) {
+		DoublyLinkedNode<Y>* one = node->next;
+		node->item.second = one->item.second;
+		node->next = one->next;
+		if (one->next == nullptr)tail = node;
+		else one->next->pre = node;
+		delete one;
+	}
 	//delete first node
-	void deleteFirstNode() {
+	virtual void deleteFirstNode() {
 		DoublyLinkedNode<Y>* one = first;
 		if (one == nullptr) return;
 		first = one->next;
@@ -278,7 +285,7 @@ public:
 		first = tail = nullptr;
 	}
 
-	~DoublyLinkedList() {
+	virtual ~DoublyLinkedList() {
 		release();
 	}
 
@@ -291,15 +298,11 @@ public:
 		cout << endl;
 	}
 
-
-
 	//int length;//length of linked list
 	//Y key;// save item in first node
 	DoublyLinkedNode<Y>* first;//first node
 	DoublyLinkedNode<Y>* tail;//tail node
 };
-
-
 
 
 using ForbidTimeNode = LinkedNode<int>;
@@ -353,164 +356,176 @@ struct ForbidTimeList : public LinkedList<int> {
 
 /*used for the array vioT
 */
-using Triad = tuple<int, int, int>; 
-using ForbidTriadNode = DoublyLinkedNode<Triad>; 
-struct ForbidTriadList : public DoublyLinkedList<Triad> {
-	void removeNodeLessThan(int filterNum) {
-		DoublyLinkedNode<Triad>* now = first, *temp = nullptr;
-		int intvE, intvS;
-		while (now != nullptr) {//O(delta)
-			tie(intvS, intvE, std::ignore) = now->item;
-			if (intvE < filterNum) {
-				if (now->pre == nullptr) {
-					deleteFirstNode();
-					now = first;
-				}
-				else {
-					temp = now->next;
-					deleteNextNode(now->pre);
-					now = temp;
-				}
-			}
-			else if (intvS < filterNum) {
-				get<0>(now->item) = filterNum;
-				break;
-			}
-			else break;
-		}
-	}
-
-	void removeNodeMoreThan(int filterNum) {
-		DoublyLinkedNode<Triad>* now = tail, *temp = nullptr;
-		int intvE, intvS; 
-		while (now != nullptr) {//O(delta)
-			tie(intvS, intvE, std::ignore) = now->item; 
-			if (intvS > filterNum) {
-				if (now->pre == nullptr) {
-					deleteFirstNode();
-					break;
-				}
-				else {
-					temp = now->pre;
-					deleteNextNode(temp);
-					now = temp;
-				}
-			}
-			else if (intvE > filterNum) {
-				get<1>(now->item) = filterNum;
-				break;
-			}
-			else break;
-		}
-	}
-	void addItemAtLastWithCheck(Triad item) {
-		DoublyLinkedNode<Triad>* node = DBG_NEW DoublyLinkedNode<Triad>(item);
-		int firstTailItem, secondTailItem, thirdTailItem;
-		int firstItem, secondItem, thirdItem;
-		//if (length == 0)tail = node;
-		if (tail == nullptr) { 
-			first = node;
-			tail = node;
-		}
-		else { 
-			tie(firstTailItem, secondTailItem, thirdTailItem) = tail->item;
-			tie(firstItem, secondItem, thirdItem) = item;
-			if (thirdTailItem == -1 && thirdItem == -1) {
-				if (secondTailItem >= firstItem && firstTailItem <= secondItem) {
-					get<0>(tail->item) = min(firstTailItem, firstItem);
-					get<1>(tail->item) = max(secondTailItem, secondItem);
-				}
-				else if (firstTailItem == secondItem + 1) {
-					get<0>(tail->item) = firstItem;
-				}
-				else {
-					tail->next = node;
-					tail = node;
-				}
-			}
-			else if (thirdTailItem != -1 && thirdItem != -1) {
-				if (firstTailItem == firstItem) {
-					if (thirdTailItem >= secondItem && secondTailItem <= thirdItem) {
-						get<1>(tail->item) = min(secondTailItem, secondItem);
-						get<2>(tail->item) = max(thirdTailItem, thirdItem);
-					}
-					else if (secondTailItem == thirdItem + 1) {
-						get<1>(tail->item) = secondItem;
-					}
-					else {
-						tail->next = node;
-						tail = node;
-					}
-				}
-				else {
-					tail->next = node;
-					tail = node;
-				}
-			}
-			else {
-				tail->next = node;
-				tail = node;
-			}
-		}
-		//length++;
-	}
-	void output() {
-		ForbidTriadNode* now = first;
-		while (now != nullptr) {
-			cout << "("<< get<0>(now->item) << ", " << get<1>(now->item)<< ", " << get<2>(now->item) << ") ";
-			now = now->next;
-		}
-		cout << endl;
-	}
-
-	void outputExceptLast() {
-		ForbidTriadNode* now = first;
-		while (now != nullptr&& now->next != nullptr) {
-			cout << "(" << get<0>(now->item) << ", " << get<1>(now->item) << ", " << get<2>(now->item) << ") ";
-			now = now->next;
-		}
-		cout << endl;
-	}
-
-	void output2() {
-		ForbidTriadNode* now = first;
-		int intvS, intvE;
-		while (now != nullptr) {
-			tie(intvS, intvE, std::ignore) = now->item;
-			for (int start = intvS; start <= intvE; start++) {
-				cout << start << " ";
-			}
-			now = now->next;
-		}
-		cout << endl;
-	}
-
-
-	//for testing
-	bool check(vec(int) lis) {
-		ForbidTriadNode* now = first;
-		int intvS, intvE;
-		if (lis.size() == 0 && now != nullptr) return false;
-		for (auto iter = lis.begin(); iter != lis.end(); ++iter) {
-			tie(intvS, intvE, std::ignore) = now->item;
-			if (now != nullptr) {
-				if (*iter < intvS || *iter > intvE) {
-					return false;
-				}
-				else if (*iter == intvE) {
-					now = now->next;
-				}
-			}
-			else return false;
-		}
-		return true;
-	}
-
-};
+//using Triad = tuple<int, int, int>; 
+//using ForbidTriadNode = DoublyLinkedNode<Triad>; 
+//struct ForbidTriadList : public DoublyLinkedList<Triad> {
+//	void removeNodeLessThan(int filterNum) {
+//		DoublyLinkedNode<Triad>* now = first, *temp = nullptr;
+//		int intvE, intvS;
+//		while (now != nullptr) {//O(delta)
+//			tie(intvS, intvE, std::ignore) = now->item;
+//			if (intvE < filterNum) {
+//				if (now->pre == nullptr) {
+//					deleteFirstNode();
+//					now = first;
+//				}
+//				else {
+//					temp = now->next;
+//					deleteNextNode(now->pre);
+//					now = temp;
+//				}
+//			}
+//			else if (intvS < filterNum) {
+//				get<0>(now->item) = filterNum;
+//				break;
+//			}
+//			else break;
+//		}
+//	}
+//
+//	void removeNodeMoreThan(int filterNum) {
+//		DoublyLinkedNode<Triad>* now = tail, *temp = nullptr;
+//		int intvE, intvS; 
+//		while (now != nullptr) {//O(delta)
+//			tie(intvS, intvE, std::ignore) = now->item; 
+//			if (intvS > filterNum) {
+//				if (now->pre == nullptr) {
+//					deleteFirstNode();
+//					break;
+//				}
+//				else {
+//					temp = now->pre;
+//					deleteNextNode(temp);
+//					now = temp;
+//				}
+//			}
+//			else if (intvE > filterNum) {
+//				get<1>(now->item) = filterNum;
+//				break;
+//			}
+//			else break;
+//		}
+//	}
+//	void addItemAtLastWithCheck(Triad item) {
+//		DoublyLinkedNode<Triad>* node = DBG_NEW DoublyLinkedNode<Triad>(item);
+//		int firstTailItem, secondTailItem, thirdTailItem;
+//		int firstItem, secondItem, thirdItem;
+//		//if (length == 0)tail = node;
+//		if (tail == nullptr) { 
+//			first = node;
+//			tail = node;
+//		}
+//		else { 
+//			tie(firstTailItem, secondTailItem, thirdTailItem) = tail->item;
+//			tie(firstItem, secondItem, thirdItem) = item;
+//			if (thirdTailItem == -1 && thirdItem == -1) {
+//				if (secondTailItem >= firstItem && firstTailItem <= secondItem) {
+//					get<0>(tail->item) = min(firstTailItem, firstItem);
+//					get<1>(tail->item) = max(secondTailItem, secondItem);
+//				}
+//				else if (firstTailItem == secondItem + 1) {
+//					get<0>(tail->item) = firstItem;
+//				}
+//				else {
+//					tail->next = node;
+//					tail = node;
+//				}
+//			}
+//			else if (thirdTailItem != -1 && thirdItem != -1) {
+//				if (firstTailItem == firstItem) {
+//					if (thirdTailItem >= secondItem && secondTailItem <= thirdItem) {
+//						get<1>(tail->item) = min(secondTailItem, secondItem);
+//						get<2>(tail->item) = max(thirdTailItem, thirdItem);
+//					}
+//					else if (secondTailItem == thirdItem + 1) {
+//						get<1>(tail->item) = secondItem;
+//					}
+//					else {
+//						tail->next = node;
+//						tail = node;
+//					}
+//				}
+//				else {
+//					tail->next = node;
+//					tail = node;
+//				}
+//			}
+//			else {
+//				tail->next = node;
+//				tail = node;
+//			}
+//		}
+//		//length++;
+//	}
+//	void output() {
+//		ForbidTriadNode* now = first;
+//		while (now != nullptr) {
+//			cout << "("<< get<0>(now->item) << ", " << get<1>(now->item)<< ", " << get<2>(now->item) << ") ";
+//			now = now->next;
+//		}
+//		cout << endl;
+//	}
+//
+//	void outputExceptLast() {
+//		ForbidTriadNode* now = first;
+//		while (now != nullptr&& now->next != nullptr) {
+//			cout << "(" << get<0>(now->item) << ", " << get<1>(now->item) << ", " << get<2>(now->item) << ") ";
+//			now = now->next;
+//		}
+//		cout << endl;
+//	}
+//
+//	void output2() {
+//		ForbidTriadNode* now = first;
+//		int intvS, intvE;
+//		while (now != nullptr) {
+//			tie(intvS, intvE, std::ignore) = now->item;
+//			for (int start = intvS; start <= intvE; start++) {
+//				cout << start << " ";
+//			}
+//			now = now->next;
+//		}
+//		cout << endl;
+//	}
+//
+//
+//	//for testing
+//	bool check(vec(int) lis) {
+//		ForbidTriadNode* now = first;
+//		int intvS, intvE;
+//		if (lis.size() == 0 && now != nullptr) return false;
+//		for (auto iter = lis.begin(); iter != lis.end(); ++iter) {
+//			tie(intvS, intvE, std::ignore) = now->item;
+//			if (now != nullptr) {
+//				if (*iter < intvS || *iter > intvE) {
+//					return false;
+//				}
+//				else if (*iter == intvE) {
+//					now = now->next;
+//				}
+//			}
+//			else return false;
+//		}
+//		return true;
+//	}
+//
+//};
 
 using Pair = pair<int, int>;
 using ForbidPairNode = DoublyLinkedNode<Pair>;
-struct ForbidPairList : public DoublyLinkedList<Pair> {
+class ForbidPairList : public DoublyLinkedList<Pair> {
+public:
+	ForbidPairList(): DoublyLinkedList<Pair>(){}
+	virtual ~ForbidPairList() {}
+	virtual inline void increaseItemLen(Pair& item) {
+		item.second++;
+	}
+
+	inline void insertToSetR(int edgeId, vec(int)& edgeSetsR) {
+		edgeSetsR.emplace_back(edgeId);
+	}
+	virtual inline void insertToSetR(int edgeId, vec(Pair)& edgeSetsR) {}
+
 	void copyTo(ForbidPairList& list) {
 		DoublyLinkedNode<Pair>* temp = list.first;
 		while (temp != nullptr) {
@@ -519,7 +534,7 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 		}
 	}
 
-	void removeNodeLessThan(int filterNum) {
+	virtual void removeNodeLessThan(int filterNum) {
 		DoublyLinkedNode<Pair>* now = first, *temp = nullptr;
 		//int intvE, intvS;
 		while (now != nullptr) {//O(delta)
@@ -544,31 +559,32 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 		}
 	}
 
-	void removeNodeMoreThan(int filterNum) {
-		DoublyLinkedNode<Pair>* now = tail, *temp = nullptr;
-		//int intvE, intvS;
-		while (now != nullptr) {//O(delta)
-			//tie(intvS, intvE, std::ignore) = now->item;
-			if (now->item.first > filterNum) {
-				if (now->pre == nullptr) {
-					deleteFirstNode();
-					break;
-				}
-				else {
-					temp = now->pre;
-					deleteNextNode(temp);
-					now = temp;
-				}
-			}
-			else if (now->item.second > filterNum) {
-				get<1>(now->item) = filterNum;
-				break;
-			}
-			else break;
-		}
-	}
+	//virtual void removeNodeMoreThan(int filterNum) {
+	//	DoublyLinkedNode<Pair>* now = tail, *temp = nullptr;
+	//	//int intvE, intvS;
+	//	while (now != nullptr) {//O(delta)
+	//		//tie(intvS, intvE, std::ignore) = now->item;
+	//		if (now->item.first > filterNum) {
+	//			if (now->pre == nullptr) {
+	//				deleteFirstNode();
+	//				break;
+	//			}
+	//			else {
+	//				temp = now->pre;
+	//				deleteNextNode(temp);
+	//				now = temp;
+	//			}
+	//		}
+	//		else if (now->item.second > filterNum) {
+	//			get<1>(now->item) = filterNum;
+	//			break;
+	//		}
+	//		else break;
+	//	}
+	//}
+	
 	void output() {
-		ForbidPairNode* now = first;
+		auto now = first;
 		while (now != nullptr) {
 			cout << "(" << now->item.first << ", " << now->item.second << ") ";
 			now = now->next;
@@ -577,7 +593,7 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 	}
 
 	void outputExceptLast() {
-		ForbidPairNode* now = first;
+		auto now = first;
 		while (now != nullptr&& now->next != nullptr) {
 			cout << "(" << now->item.first << ", " << now->item.second << ") ";
 			now = now->next;
@@ -586,7 +602,7 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 	}
 
 	void output2() {
-		ForbidPairNode* now = first;
+		auto now = first;
 		int intvS, intvE;
 		while (now != nullptr) {
 			tie(intvS, intvE) = now->item;
@@ -601,12 +617,12 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 
 	//for testing
 	bool check(vec(int) lis) {
-		ForbidPairNode* now = first;
+		auto now = first;
 		int intvS, intvE;
 		if (lis.size() == 0 && now != nullptr) return false;
 		for (auto iter = lis.begin(); iter != lis.end(); ++iter) {
-			tie(intvS, intvE) = now->item;
 			if (now != nullptr) {
+				tie(intvS, intvE) = now->item;
 				if (*iter < intvS || *iter > intvE) {
 					return false;
 				}
@@ -619,9 +635,103 @@ struct ForbidPairList : public DoublyLinkedList<Pair> {
 		return true;
 	}
 
-};
+}; 
+
+//class ForbidPairListWithLen : public ForbidPairList {
+//public:
+//	ForbidPairListWithLen() :ForbidPairList() {
+//		noiseLen = 0;
+//	}
+//	virtual void addNodeAtFirst(ForbidPairNode*& node) {
+//		ForbidPairList::addNodeAtFirst(node);
+//		noiseLen += node->item.second - node->item.first + 1;
+//	}
+//	virtual inline void increaseItemLen(Pair& item) {
+//		item.second++;
+//		noiseLen++;
+//	}
+//	virtual inline void insertToSetR(int edgeId, vec(Pair)& edgeSetsR) {
+//		edgeSetsR.emplace_back(edgeId, noiseLen);
+//	}
+//
+//	virtual void addNodeAft(ForbidPairNode*& pos, Pair&& item) {
+//		ForbidPairNode* node = DBG_NEW ForbidPairNode(item);
+//		node->next = pos->next;
+//		if (pos->next != nullptr) pos->next->pre = node;
+//		pos->next = node;
+//		node->pre = pos;
+//		if (tail == pos) tail = node;
+//		noiseLen += item.second - item.first + 1;
+//	}
+//
+//	virtual void addNodeAtLast(ForbidPairNode*& node) {
+//		ForbidPairList::addNodeAtLast(node);
+//		noiseLen += node->item.second - node->item.first + 1;
+//	}
+//
+//	virtual void addItemAtFirst(Pair&& item) {
+//		ForbidPairNode* node = DBG_NEW ForbidPairNode(item);
+//		if (first == nullptr) tail = node;
+//		else first->pre = node;
+//		node->next = first;
+//		first = node;
+//		noiseLen += item.second - item.first + 1;
+//	}
+//
+//	virtual void addItemAtLast(Pair&& item) {
+//		ForbidPairNode* node = DBG_NEW ForbidPairNode(item);
+//		if (tail == nullptr) first = node;
+//		else tail->next = node;
+//		node->pre = tail;
+//		tail = node;
+//		noiseLen += item.second - item.first + 1;
+//	}
+//
+//	//delete node after the current node
+//	virtual void combineNextNode(ForbidPairNode*& node) {
+//		ForbidPairNode* one = node->next;
+//		ForbidPairList::combineNextNode(node);
+//	}
+//
+//	//delete first node
+//	virtual void deleteFirstNode() {
+//		if (first == nullptr) return;
+//		noiseLen -= first->item.second - first->item.first + 1;
+//		ForbidPairList::deleteFirstNode();
+//	}
+//
+//	virtual void removeNodeLessThan(int filterNum) {
+//		DoublyLinkedNode<Pair>* now = first, *temp = nullptr;
+//		while (now != nullptr) {//O(delta)
+//			if (now->item.second < filterNum) {
+//				if (now->pre == nullptr) {
+//					assert(first != nullptr);
+//					deleteFirstNode();
+//					now = first;
+//				}
+//				else {
+//					temp = now->next;
+//					deleteNextNode(now->pre);
+//					now = temp;
+//				}
+//			}
+//			else if (now->item.first < filterNum) {
+//				noiseLen -= (filterNum - now->item.first);
+//				now->item.first = filterNum;
+//				break;
+//			}
+//			else break;
+//		}
+//	}
+//	int noiseLen;
+//};
 
 using EdgeIdArray = vector<int>;
 using EdgeIdArrayNode = LinkedNode<EdgeIdArray>;
 using EdgeIdArrayList = LinkedList<EdgeIdArray>;
 
+struct NoiseLenCmp {
+	bool operator()(const Pair& a, const Pair& b) const {
+		return a.second < b.second;
+	}
+};

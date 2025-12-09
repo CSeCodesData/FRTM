@@ -2,7 +2,7 @@
 
 
 //the type of algorithm
-enum AlgorithmType : char {
+enum AlgorithmType : uint8_t{
 	INIT = 0, //initialized
 	TESTING = 6, //testing parameters
 	
@@ -25,6 +25,7 @@ public:
 	static int nodes, edges, allNTimestamp;
 	static double delta;//global relaxation bound
 	static int c;//local relaxation bound
+	//static bool compressMode;//save motif with less memory
 };
 
 enum EMaxIntvlChange : int {

@@ -7,7 +7,7 @@
 class TGraphUDEL: public TGraph {
 public:
 	
-	TGraphUDEL() {
+	TGraphUDEL() :bef(nullptr), lab(nullptr), aft(nullptr), dif(nullptr), tail(nullptr) {
 	}
 	// copy-constructed
 	TGraphUDEL(const TGraphUDEL& ances);
@@ -30,7 +30,7 @@ public:
 	}
 
 	/*get the label of edge with edgeId at the timePos (time-startT)*/
-	int getEdgeLabel(int edgeId, int timePos) {
+	inline int getEdgeLabel(int edgeId, int timePos) {
 		return lab[timePos*nEdge + edgeId];
 	}
 
@@ -79,28 +79,16 @@ public:
 		if (realAft == aft[checkPos] - t + p) return;
 		aft[pos] = aft[checkPos] - t + p;
 	}
-private:
-	
 	/*edgeFilter for FRTMExact*/
 	void edgeFilter(int intvB, int intvE,
 		SAVEINFO_Vec*& edgeSetsR, int& selectedNum, bool*& fixLabel, bool isEdgeTypeFixed);
 
 	void edgeFilterFRTM(int intvB, int intvE,
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-	void edgeFilterFRTMMidR(int intvB, int intvE,
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-	void edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-
-	
-	void edgeFilterOpt1(int intvB, int intvE, vec(int)*& edgeSetsRAdd, /**/
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-	//for m > T - k + 1
-	void edgeFilterOpt1MidR(int intvB, int intvE, vec(int)*& edgeSetsRAdd, /* */
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
+		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed, bool dynamicMode, int* edgeSetsRAdd = nullptr);
 	//for m <= T - k + 1
-	void edgeFilterOpt1MidRForDYN(int intvB, int intvE, int oriEndTE, vec(int)*& edgeSetsRAdd,/**/
-		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
+	void edgeFilterFRTMMidRForDYN(int intvB, int intvE, int oriEndTE,
+		vec(int)*& edgeSetsR, int& selectedNum, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed, int* edgeSetsRAdd = nullptr);
+
 
 	//for short intervals
 	void edgeFilterShortIntv(int intvB, int intvE, int limited,
@@ -112,23 +100,34 @@ private:
 	void edgeFilterShortIntvMidRForDYN(int intvB, int intvE, int limited, bool*& hasE, int*& newE, int& newENum, int oriEndT, int lastTimeNoNoise,
 		vec(int)*& edgeSetsR, int& selectedNum, bool*& fixLabel, bool isEdgeTypeFixed);//the same as edgeFilter but limit at [intvB,limitedE]
 
-	
-	void edgeFilterPlus(int intvB, int intvE, int filterE, int limited, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,/**/
+
+	void edgeFilterPlus(int intvB, int intvE, int filterE, int limited, bool*& hasE, int*& newE, int& newENum, int*& edgeSetsRAdd,
 		vec(int)*& selectedEdge, int& selectedNum, vec(int)*& selectedEdgeNoEdge, int& selectedNumNoEdge,
-		int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-	void edgeFilterPlusMidR(int intvB, int intvE, int filterE, int limited, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,
-		vec(int)*& edgeSetsR, int& selectedNum, vec(int)*& selectedEdgeNoEdge, int& selectedNumNoEdge, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
-	void edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int limited, int oriEndTE, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, vec(int)*& edgeSetsRAdd,
+		int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed, bool dynamicMode);
+	void edgeFilterPlusMidRForDYN(int intvB, int intvE, int filterE, int limited, int oriEndTE, bool*&/*iSet&*/ hasE, int*& newE, int& newENum, int*& edgeSetsRAdd,
 		vec(int)*& selectedEdge, int& selectedNum, vec(int)*& selectedEdgeNoEdge, int& selectedNumNoEdge, int& rightEndpoint, int k, bool*& fixLabel, bool isEdgeTypeFixed);
+
+private:
+	inline void removeNonOverlapPreEMaxIntv(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT);
+	inline void removeNonOverlapPreEMaxIntvWithMem(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT, int edgeId, int timestampPosForEMaxIntvlEndT, int& preMaxEMaxIntvlEndT/*, int& preMaxEMaxIntvlStartT*/);
+	inline void removeNonOverlapPreEMaxIntvWithMem(CircularQueue<NVIntv>& preEMaxIntvlPtr, int checkT, int edgeId, int mainLabel, int timestampPosForEMaxIntvlEndT, int& preMaxEMaxIntvlEndT/*, int& preMaxEMaxIntvlStartT*/, int& maxEMaxIntvlEndT, int& maxEMaxIntvlStartT);
+	template<class T>
+	inline void saveToEdgeSetsR(int savePos, int edgeId, vec(T)*& edgeSetsR, ForbidPairList* noiseRecord, int& selectedNum, int& rightEndpoint);
+	inline void saveToMidResult(int lastMainLabelPos, int edgeId, int localNoise, int mainLabelPos, int intvB, ForbidPairList& now);
+
 	
-	
+	inline void getCurrentNoise(int currentPos, int mainLabel, int eid, int& localNoise, int& noiseNum);
+	inline void updateVioT(int intvB, ForbidPairList& now, ForbidPairNode*& forbidIntv, int mainLabel, int eid, bool dynamicMode,
+		int& localNoise, int& noiseNum);
+	inline void scan(int currentPos, int beginPos, int endPos, ForbidPairList& now,
+		int mainLabel, int mainLabelPos, int eid, int forbidTimeStartT, bool dynamicMode, int& localNoise,
+		int& noiseNum, int& lastMainLabelPos);
+	inline void fetchPreEMaxIntvl(CircularQueue<NVIntv>& preEMaxIntvlPtr, int eid, int mainLabel,
+		int timestampPosForEMaxIntvlEndT, int& EMaxIntvlStartT, int& EMaxIntvlEndT);
+
 	//fit definitions in [timePos1+startT, timePos2+startT]
 	bool bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int startTimePos1, int startTimePos2, int endTimePos, int mainLabelPos, bool*& expandMask);
-	bool bothFitDefAndSameLabelChangeStartTimePos(vec(int)& edges, int*&subCCId, int startTimePos1, int startTimePos2, int endTimePos, int mainLabelPos, bool*& expandMask);
-	bool bothFitDefAndSameLabelChangeStartTimePos(vec(int)& subCCs, vec(int)& edges, int startTimePos1, int startTimePos2, int endTimePos, int mainLabelPos, bool*& expandMask);
-	bool bothFitDefAndSameLabelChangeEndTimePos(vec(int)& subCCs, vec(int)& edges, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask);
 	bool bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask);
-	bool bothFitDefAndSameLabelChangeEndTimePos(vec(int)& edges, int*&subCCId, int startTimePos, int endTimePos1, int endTimePos2, int mainLabelPos, bool*& expandMask);
 protected:
 
 

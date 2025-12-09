@@ -47,18 +47,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FindTMotif.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="TGraph.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="TMotif.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="FindRTMotif.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Util.h">
       <Filter>头文件\Base</Filter>
     </ClInclude>
@@ -80,11 +68,20 @@
     <ClInclude Include="DisjointSet.h">
       <Filter>头文件\Base</Filter>
     </ClInclude>
+    <ClInclude Include="FindRTMotif.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="FindTMotif.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TGraph.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
     <ClInclude Include="TGraphUDEL.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="DynamicConnectivity.h">
-      <Filter>头文件\Base</Filter>
+    <ClInclude Include="TMotif.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
